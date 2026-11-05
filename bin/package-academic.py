@@ -23,6 +23,7 @@ def main():
         for name in FILES:
             archive.write(ROOT / name, 'KPI/' + name)
         archive.write(ROOT / 'bin/install-academic.bat', 'INSTALL-ACADEMIC.bat')
+        archive.write(ROOT / 'bin/academic-installer.php', 'INSTALL-ACADEMIC.php')
         archive.write(ROOT / 'docs/ACADEMIC.md', 'BIRINCHI-OQING.md')
         archive.writestr('files.sha256', manifest)
     with zipfile.ZipFile(path) as archive:

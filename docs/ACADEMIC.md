@@ -4,14 +4,16 @@ Kirish sahifasi: markazdagi ikki ustunli blok, chapda foydalanuvchi bergan FarDU
 
 ## O‘rnatish
 
-1. Yangilanish ZIP’ini yangi, alohida papkaga oching.
+1. Yangilanish ZIP’ini o‘ng tugma → **Extract All / Извлечь всё** orqali yangi, alohida papkaga to‘liq oching. BAT’ni ZIP ichidan bosmang. `INSTALL-ACADEMIC.bat`, `INSTALL-ACADEMIC.php`, `files.sha256` va `KPI` papkasi birga turishi kerak.
 2. `INSTALL-ACADEMIC.bat`ni ishga tushiring.
 3. Fayl tanlash oynasida ishlayotgan KPI dasturingizning `start-native.bat` faylini tanlang.
 4. “TAYYOR” xabaridan keyin brauzerda Ctrl+F5 bosing. Dastur yopiq bo‘lsa avvalgidek ishga tushiring.
 
+O‘rnatuvchining 2-versiyasi barcha 11 faylning SHA-256 qiymatini va yozish ruxsatlarini oldindan tekshiradi. Mavjud PHP orqali ishlaydi. Xatoda aniq fayl nomi ko‘rsatiladi; nusxalash boshlangan bo‘lsa avvalgi fayllar qaytariladi. Tafsilotlar zaxira papkasidagi `install.log`ga yoziladi.
+
 O‘rnatuvchi avvalgi fayllarni `runtime/academic-backup-...`ga saqlaydi. Baza, parollar, maxfiy sozlamalar va yuklangan hujjatlar paketga kiritilmaydi va almashtirilmaydi. Yangi migratsiya yoki qayta o‘rnatish kerak emas. Paket boshlang‘ich Docker’siz v1.1 va oldingi v2 dizayni ustidan qo‘llanishi mumkin.
 
-Windows o‘rnatuvchisi Linux muhitida bevosita sinovdan o‘tkazilmagan. Muqobil usul: zaxira olgach ZIP’dagi `KPI` papkasining ichidagi papkalarni mavjud dastur ildiziga ko‘chiring va faqat mos fayllarni almashtiring. Ichma-ich `KPI/KPI` papkasi hosil bo‘lmasin.
+Windows BAT oynasi Linux muhitida bevosita sinovdan o‘tkazilmagan. ZIP ichidagi PHP o‘rnatuvchisi alohida nusxalarda o‘rnatish, takroriy o‘rnatish, zaxira nusxasi, buzilgan/yetishmayotgan paket, yozish ruxsati va noto‘g‘ri manzil holatlari bo‘yicha tekshiriladi (`python tests/academic_installer.py`). Muqobil usul: zaxira olgach ZIP’dagi `KPI` papkasining ichidagi papkalarni mavjud dastur ildiziga ko‘chiring va faqat mos fayllarni almashtiring. Ichma-ich `KPI/KPI` papkasi hosil bo‘lmasin.
 
 ## Ma’lumotlar va animatsiyalar
 

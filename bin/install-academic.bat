@@ -2,51 +2,38 @@
 chcp 65001 >nul
 setlocal
 cd /d "%~dp0"
-echo FarDU KPI - Akademik dizayn
-echo Bu dastur akademik korinish va dashboard fayllarini yangilaydi.
-echo Hozir ochiladigan oynada MAVJUD KPI dasturingizdagi start-native.bat faylini tanlang.
-echo.
+echo FarDU KPI - Akademik dizayn - installer 2
+if not exist "%~dp0INSTALL-ACADEMIC.php" goto incomplete
+if not exist "%~dp0files.sha256" goto incomplete
+if not exist "%~dp0KPI\web\css\academic.css" goto incomplete
+echo Mavjud KPI dasturingizdagi start-native.bat faylini tanlang.
 set "KPI_TARGET="
 for /f "delims=" %%P in ('powershell -NoProfile -STA -Command "[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false); Add-Type -AssemblyName System.Windows.Forms; $d=New-Object System.Windows.Forms.OpenFileDialog; $d.Title='Mavjud KPI papkasidagi start-native.bat faylini tanlang'; $d.Filter='KPI launcher (start-native.bat)|start-native.bat'; if($d.ShowDialog() -eq 'OK'){[System.IO.Path]::GetDirectoryName($d.FileName)}"') do set "KPI_TARGET=%%P"
-if not defined KPI_TARGET (
-  echo Fayl tanlanmadi. Yangilash bekor qilindi.
-  pause
-  exit /b 1
-)
-if not exist "%KPI_TARGET%\views\layouts\main.php" (
-  echo Tanlangan papka KPI dasturiga mos emas. Hech narsa o'zgartirilmadi.
-  pause
-  exit /b 1
-)
-set "KPI_BACKUP=%KPI_TARGET%\runtime\academic-backup-%RANDOM%-%RANDOM%"
-mkdir "%KPI_BACKUP%"
+if not defined KPI_TARGET goto cancelled
+set "KPI_PHP="
+if exist "%KPI_TARGET%\php\php.exe" set "KPI_PHP=%KPI_TARGET%\php\php.exe"
+if not defined KPI_PHP if exist "C:\xampp\php\php.exe" set "KPI_PHP=C:\xampp\php\php.exe"
+if not defined KPI_PHP if exist "C:\php\php.exe" set "KPI_PHP=C:\php\php.exe"
+if not defined KPI_PHP for /f "delims=" %%P in ('where php.exe 2^>nul') do if not defined KPI_PHP set "KPI_PHP=%%P"
+if not defined KPI_PHP goto missingphp
+"%KPI_PHP%" -n "%~dp0INSTALL-ACADEMIC.php" "%KPI_TARGET%"
 if errorlevel 1 goto failed
-for %%F in ("controllers\KpiController.php" "services\Dashboard.php" "services\Ui.php" "views\layouts\main.php" "views\kpi\index.php" "views\auth\login.php" "web\css\design.css" "web\css\academic.css" "web\js\app.js" "web\images\fardu-campus.jpg" "web\images\fardu-logo.png") do (
-  call :copy_one "%%~F"
-  if errorlevel 1 goto failed
-)
-echo.
-echo TAYYOR. Yangi dizayn o'rnatildi.
-echo Brauzeringizda Ctrl+F5 bosing.
-echo Dastur ochiq bo'lmasa, avvalgidek start-native.bat orqali oching.
-echo Avvalgi dizayn nusxasi: "%KPI_BACKUP%"
-echo Baza, parollar va hujjatlar o'zgartirilmadi.
+echo Dastur ochiq bolmasa, avvalgidek start-native.bat orqali oching.
 pause
 exit /b 0
-:copy_one
-if not exist "%~dp0KPI\%~1" exit /b 1
-for %%D in ("%KPI_TARGET%\%~1") do if not exist "%%~dpD" mkdir "%%~dpD"
-if errorlevel 1 exit /b 1
-if exist "%KPI_TARGET%\%~1" (
-  for %%D in ("%KPI_BACKUP%\%~1") do if not exist "%%~dpD" mkdir "%%~dpD"
-  copy /y "%KPI_TARGET%\%~1" "%KPI_BACKUP%\%~1" >nul
-  if errorlevel 1 exit /b 1
-)
-copy /y "%~dp0KPI\%~1" "%KPI_TARGET%\%~1" >nul
-exit /b %errorlevel%
+:incomplete
+echo XATO: Yangilash paketi toliq ochilmagan.
+echo ZIP ustida ong tugma - Extract All / Izvlech vse ni tanlang.
+echo Ochilgan papkada INSTALL-ACADEMIC.bat, INSTALL-ACADEMIC.php,
+echo files.sha256 va KPI papkasi birga turishi kerak.
+echo BATni ZIP ichidan ishga tushirmang.
+goto failed
+:cancelled
+echo Fayl tanlanmadi. Dastur ozgartirilmadi.
+goto failed
+:missingphp
+echo XATO: PHP topilmadi. Mavjud dastur papkasida php\php.exe bolishi kerak.
 :failed
-echo Yangilash tugamadi. Avvalgi fayllar mavjud zaxiradan qaytarilmoqda.
-for %%F in ("controllers\KpiController.php" "services\Dashboard.php" "services\Ui.php" "views\layouts\main.php" "views\kpi\index.php" "views\auth\login.php" "web\css\design.css" "web\css\academic.css" "web\js\app.js" "web\images\fardu-campus.jpg" "web\images\fardu-logo.png") do if exist "%KPI_BACKUP%\%%~F" copy /y "%KPI_BACKUP%\%%~F" "%KPI_TARGET%\%%~F" >nul
-echo Qora oynaning skrinshotini yordam uchun yuboring.
+echo Yuqoridagi XATO xabarini tekshiring. Bu oynani yopishdan oldin rasmga oling.
 pause
 exit /b 1
