@@ -2,6 +2,12 @@
 
 Yii2 asosidagi o‘zbekcha KPI tizimi. Yuborilgan mezonlar hujjati va 1C manbasi asosida **3 toifa, 4 faoliyat yo‘nalishi, 46 mezon va 139 ko‘rsatkich** kiritilgan.
 
+## Mavjud dastur uchun yangi dizayn
+
+Ishlayotgan v1.1 dasturini qayta o‘rnatmasdan yangilash uchun `releases/KPI-Design-v2-update.zip`dan foydalaning. Uni alohida papkaga oching, `INSTALL-DESIGN.bat`ni bosing va mavjud dasturdagi `start-native.bat` faylini tanlang. Keyin brauzerda Ctrl+F5 bosing. Eski ko‘rinishning nusxasi avtomatik saqlanadi; baza, parollar va dalillar almashtirilmaydi. Batafsil yo‘riqnoma va qo‘lda ko‘chirish usuli: [Dizayn v2](docs/DIZAYN-V2.md).
+
+Yangi interfeys kunduzgi/tungi rejim, mobil menyu, haqiqiy natijalar asosidagi grafiklar va yangilangan forma/jadvallarni o‘z ichiga oladi. Qo‘shimcha CSS, JavaScript va SVG ikonlar lokal saqlanadi; CDN kerak emas.
+
 ## Windows’da Docker’siz foydalanish
 
 1. `start-native.bat`ni oching. U loyiha ichidagi `php/php.exe`, `C:\xampp\php\php.exe`, `C:\php\php.exe` yoki PATH’dagi PHP’ni topadi.
