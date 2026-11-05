@@ -6,6 +6,7 @@ class Ui
     public static function icon(string $name, string $class=''): string
     {
         $paths=[
+            'campus'=>'<path d="m2 8 10-5 10 5H2M3 21h18M5 18V10M10 18V10M14 18V10M19 18V10M3 18h18"/>',
             'grid'=>'<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',
             'file'=>'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/>',
             'plus'=>'<path d="M12 5v14M5 12h14"/>',
@@ -38,6 +39,12 @@ class Ui
     }
     public static function h($value): string {return Html::encode((string)$value);}
     public static function money($cents): string {return number_format((int)$cents/100,2,'.',' ');}
+    public static function brandLogo(string $class=''): string
+    {
+        $path=\Yii::getAlias('@app/web/images/fardu-logo.png');
+        if(is_file($path))return Html::img(\Yii::$app->request->baseUrl.'/images/fardu-logo.png?v=3',['class'=>'fardu-logo '.$class,'alt'=>'Farg‘ona davlat universiteti logotipi']);
+        return '<span class="brand-fallback '.self::h($class).'">'.self::icon('campus').'<span>FarDU<small>KPI BAHOLASH TIZIMI</small></span></span>';
+    }
     public static function input(string $label,string $name,$value='',string $type='text',array $options=[]): string
     {
         return '<label class="field"><span>'.self::h($label).'</span>'.Html::input($type,$name,$value,$options).'</label>';

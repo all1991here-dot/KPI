@@ -53,6 +53,67 @@
     }
   });
   window.matchMedia('(min-width: 1001px)').addEventListener('change', event => { if (event.matches) setMenu(false); });
+  document.querySelectorAll('[data-nav-group-toggle]').forEach(button => {
+    button.addEventListener('click', () => {
+      const panel = document.getElementById(button.getAttribute('aria-controls'));
+      if (!panel) return;
+      const open = button.getAttribute('aria-expanded') !== 'true';
+      button.setAttribute('aria-expanded', String(open)); panel.hidden = !open;
+    });
+  });
+  const svgNS = 'http://www.w3.org/2000/svg';
+  document.querySelectorAll('[data-academic-chart]').forEach((container, chartIndex) => {
+    let all;
+    try { all = JSON.parse(container.dataset.academicChart); } catch (_) { return; }
+    if (!Array.isArray(all) || !all.length) return;
+    const svg = container.querySelector('svg');
+    const output = container.querySelector('output');
+    const card = container.closest('.academic-trend-card');
+    const number = cents => (Number(cents) / 100).toLocaleString('uz-UZ', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    const create = (tag, attrs = {}, text = null) => {
+      const element = document.createElementNS(svgNS, tag);
+      for (const [key, value] of Object.entries(attrs)) element.setAttribute(key, String(value));
+      if (text !== null) element.textContent = text;
+      return element;
+    };
+    const draw = rows => {
+      svg.replaceChildren();
+      const max = Math.max(100, Math.ceil(Math.max(...rows.map(row => Number(row.cents))) / 1000) * 1000);
+      const left = 52, right = 894, top = 22, bottom = 220;
+      const points = rows.map((row, index) => ({...row, x: left + index * (right - left) / Math.max(1, rows.length - 1), y: bottom - Number(row.cents) / max * (bottom - top)}));
+      svg.appendChild(create('title', {}, 'Faoliyat sanasi bo‘yicha tasdiqlangan KPI ballari'));
+      const defs = create('defs');
+      const gradient = create('linearGradient', {id: `academic-gradient-${chartIndex}`, x1: 0, y1: 0, x2: 0, y2: 1});
+      gradient.append(create('stop', {offset: '0%', 'stop-color': '#1263dc', 'stop-opacity': '.22'}), create('stop', {offset: '100%', 'stop-color': '#1263dc', 'stop-opacity': '.01'}));
+      defs.appendChild(gradient); svg.appendChild(defs);
+      for (let tick = 0; tick <= 4; tick++) {
+        const y = bottom - tick / 4 * (bottom - top);
+        svg.append(create('line', {x1: left, y1: y, x2: right, y2: y, class: 'chart-grid-line'}));
+        svg.append(create('text', {x: left - 10, y: y + 4, 'text-anchor': 'end', class: 'chart-axis-label'}, number(max * tick / 4)));
+      }
+      const path = points.map((point, index) => `${index ? 'L' : 'M'}${point.x},${point.y}`).join(' ');
+      svg.appendChild(create('path', {d: `${path} L${points[points.length - 1].x},${bottom} L${points[0].x},${bottom} Z`, fill: `url(#academic-gradient-${chartIndex})`, 'aria-hidden': 'true'}));
+      svg.appendChild(create('path', {d: path, pathLength: 1, class: 'chart-line is-animated', 'aria-hidden': 'true'}));
+      const stride = Math.max(1, Math.ceil(points.length / 12));
+      points.forEach((point, index) => {
+        const label = `${point.label}: ${number(point.cents)} ball`;
+        const circle = create('circle', {cx: point.x, cy: point.y, r: 3.4, class: 'chart-point', tabindex: 0, role: 'img', 'aria-label': label});
+        circle.appendChild(create('title', {}, label));
+        const show = () => { if (output) output.textContent = label; };
+        circle.addEventListener('pointerenter', show); circle.addEventListener('focus', show);
+        svg.appendChild(circle);
+        if (index % stride === 0 || index === points.length - 1) svg.appendChild(create('text', {x: point.x, y: 248, 'text-anchor': 'middle', class: 'chart-axis-label'}, point.label.split(' ')[0]));
+      });
+      if (output) output.textContent = rows.every(row => !Number(row.cents)) ? 'Tanlangan oylar bo‘yicha tasdiqlangan ball yo‘q.' : 'Oy bo‘yicha ballni ko‘rish uchun nuqtani tanlang.';
+      svg.setAttribute('aria-label', `${rows[0].label} — ${rows[rows.length - 1].label}: oylar bo‘yicha tasdiqlangan KPI ballari`);
+    };
+    draw(all);
+    card?.querySelectorAll('[data-chart-range]').forEach(button => button.addEventListener('click', () => {
+      card.querySelectorAll('[data-chart-range]').forEach(item => item.setAttribute('aria-pressed', String(item === button)));
+      const length = Number(button.dataset.chartRange);
+      draw(length > 0 ? all.slice(-length) : all);
+    }));
+  });
   document.querySelectorAll('.table-wrap').forEach(wrap => {
     const hint = document.createElement('p'); hint.className = 'table-scroll-hint';
     hint.textContent = '↔ Jadvalning qolgan qismini ko‘rish uchun yon tomonga suring.';

@@ -3,7 +3,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 import time,json,sys,shutil,os
 base=sys.argv[1] if len(sys.argv)>1 else 'http://127.0.0.1:8001'
-out=Path(__file__).resolve().parents[1]/'docs'/'design-v2';out.mkdir(parents=True,exist_ok=True)
+out=Path(__file__).resolve().parents[1]/'docs'/'academic';out.mkdir(parents=True,exist_ok=True)
 with sync_playwright() as p:
  browser=p.chromium.launch(executable_path=os.environ.get('KPI_CHROMIUM') or shutil.which('chromium'),headless=True,args=['--no-sandbox'])
  page=browser.new_page(viewport={'width':1440,'height':1050},device_scale_factor=1)
@@ -21,7 +21,14 @@ with sync_playwright() as p:
  page.locator('input[name=username]').fill('http_admin');page.locator('.login-card button.button').click();page.wait_for_load_state('networkidle')
  assert page.title()=='Boshqaruv paneli · KPI',page.title()
  page.screenshot(path=str(out/'dashboard.png'),full_page=True)
- assert page.locator('.status-donut').get_attribute('aria-label')
+ assert page.locator('.academic-line-chart').get_attribute('aria-label')
+ assert page.locator('.academic-metric').count()==6
+ assert page.locator('.academic-line-chart .chart-point').count()==12
+ page.get_by_role('button',name='3 oy',exact=True).click();assert page.locator('.academic-line-chart .chart-point').count()==3
+ page.get_by_role('button',name='6 oy',exact=True).click();assert page.locator('.academic-line-chart .chart-point').count()==6
+ page.get_by_role('button',name='Barchasi',exact=True).click();assert page.locator('.academic-line-chart .chart-point').count()==12
+ page.emulate_media(reduced_motion='reduce');assert page.locator('.academic-metric').first.evaluate('(el)=>getComputedStyle(el).animationName')=='none'
+ page.emulate_media(reduced_motion='no-preference')
  print('Dashboard real-data chart, login and password visibility: passed')
  page.locator('[data-theme-toggle]').click();assert page.locator('html').get_attribute('data-theme')=='dark'
  page.reload(wait_until='networkidle');assert page.locator('html').get_attribute('data-theme')=='dark'

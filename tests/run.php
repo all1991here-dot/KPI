@@ -65,5 +65,12 @@ try{
  $second=fixture($teacher,$period,(int)$cap['id'],'Exclusive second');Workflow::act($teacher,$second,'submit');Workflow::act($head,$second,'approve','Head');Workflow::act($expert,$second,'approve','Expert');denied(fn()=>Workflow::act($admin,$second,'approve','Final'),'exclusive group enforced even for zero-score result');
  $raw=['enabled'=>1,'once_only'=>0,'calc_type'=>'XirshIndeksi','base_score'=>1000000,'upper_score'=>null,'cap_score'=>null];denied(fn()=>ScoreCalculator::calculate($raw,1,null,0,0,1000000000000),'score overflow rejected');
  check((new Query())->from('review')->where(['application_id'=>$id,'action'=>'revoke'])->exists(),'reversal retained in audit history');
+
+ $scope=(new Query())->from(['a'=>'application'])->innerJoin(['u'=>'user'],'u.id=a.employee_id')->innerJoin(['i'=>'indicator'],'i.id=a.indicator_id')->innerJoin(['p'=>'period'],'p.id=a.period_id')->where(['a.employee_id'=>$teacher->id,'a.period_id'=>$period]);
+ $details=\app\services\Dashboard::details($scope,['starts'=>'2026-01-01','ends'=>'2026-12-31']);
+ check(count($details['series'])===12,'dashboard month range uses selected period');
+ $sum=(int)(clone $scope)->andWhere(['a.status'=>'approved'])->sum('a.score_cents');
+ check(array_sum(array_column($details['series'],'cents'))===$sum,'dashboard chart equals approved activity scores');
+ check(count(array_filter($details['awaiting'],fn($a)=>(int)$a['employee_id']!==(int)$teacher->id))===0,'dashboard pending rows preserve employee scope');
  echo "\nSUCCESS: $count checks completed.\n";
 }catch(Throwable $e){fwrite(STDERR,$e."\n");exit(1);}

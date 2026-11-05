@@ -21,7 +21,10 @@ class KpiController extends BaseController
         $score=(clone $q)->andWhere(['a.status'=>'approved'])->sum('a.score_cents');
         $sections=(clone $q)->select(['i.section_name','score'=>'SUM(a.score_cents)'])->andWhere(['a.status'=>'approved'])->groupBy('i.section_name')->all();
         $recent=(clone $q)->select(['a.*','employee'=>'u.name','indicator'=>'i.name','period'=>'p.name'])->orderBy(['a.updated_at'=>SORT_DESC])->limit(8)->all();
-        return $this->render('index',compact('periodId','counts','score','sections','recent')+['periods'=>(new Query())->from('period')->orderBy(['starts'=>SORT_DESC])->all()]);
+        $periods=(new Query())->from('period')->orderBy(['starts'=>SORT_DESC])->all();$selected=null;
+        foreach($periods as $period)if((int)$period['id']===$periodId)$selected=$period;
+        $details=\app\services\Dashboard::details($q,$selected);
+        return $this->render('index',compact('periodId','counts','score','sections','recent','periods')+$details);
     }
     public function actionApplications()
     {
