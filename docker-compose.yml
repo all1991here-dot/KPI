@@ -1,0 +1,13 @@
+services:
+  app:
+    image: yiisoftware/yii2-php:8.3-apache
+    ports:
+      - "127.0.0.1:8000:80"
+    environment:
+      PHP_USER_ID: "${KPI_UID:-1000}"
+      PHP_GROUP_ID: "${KPI_GID:-1000}"
+      APACHE_DOCUMENT_ROOT: /app/web
+      PHP_ENABLE_OPCACHE: "1"
+    volumes:
+      - ./:/app
+    restart: unless-stopped

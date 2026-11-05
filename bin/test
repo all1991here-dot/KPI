@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+cd "$(dirname "$0")/.."
+task_root="$(pwd)"
+task_uid="$(id -u)"
+task_gid="$(id -g)"
+test_name="kpi-test-$(date +%s)-$$"
+test_runtime="/app/runtime/http-test-$(date +%s)-$$"
+docker run --rm --entrypoint php --user "$task_uid:$task_gid" -v "$task_root:/app" -w /app yiisoftware/yii2-php:8.3-apache tests/run.php
+docker run --rm --entrypoint php --user "$task_uid:$task_gid" -v "$task_root:/app" -w /app -e "KPI_RUNTIME_DIR=$test_runtime" yiisoftware/yii2-php:8.3-apache tests/http-fixtures.php
+docker run -d --name "$test_name" -p 127.0.0.1:8001:80 -v "$task_root:/app" -e "KPI_RUNTIME_DIR=$test_runtime" -e "PHP_USER_ID=$task_uid" -e "PHP_GROUP_ID=$task_gid" yiisoftware/yii2-php:8.3-apache >/dev/null
+trap 'docker rm -f "$test_name" >/dev/null' EXIT INT TERM
+python3 tests/http_test.py http://127.0.0.1:8001

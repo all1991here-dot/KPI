@@ -1,0 +1,9 @@
+/vendor/
+/runtime/*
+!/runtime/.gitkeep
+/config/local.php
+/backups/
+*.zip
+.DS_Store
+
+/php/

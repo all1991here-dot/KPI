@@ -1,0 +1,2 @@
+<?php use app\services\Ui;use yii\helpers\Html;$this->title='So‘rov bajarilmadi'; ?>
+<section class="card error-page"><span class="eyebrow">KPI</span><h1><?= Ui::h($error instanceof yii\web\HttpException?$error->statusCode:500) ?></h1><h2>So‘rov bajarilmadi</h2><p><?= Ui::h($error instanceof yii\web\HttpException?$error->getMessage():'Serverda xatolik yuz berdi. Administratorga murojaat qiling.') ?></p><?= Html::a('Bosh sahifaga qaytish',['kpi/index'],['class'=>'button']) ?></section>
