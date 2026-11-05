@@ -1,7 +1,7 @@
 <?php use yii\helpers\Html;use app\services\Ui;$this->title='Kirish · FarDU KPI';$hasPhoto=is_file(Yii::getAlias('@app/web/images/fardu-campus.jpg')); ?>
 <section class="fardu-login-card">
 <div class="fardu-photo-panel<?= $hasPhoto?' has-campus-photo':'' ?>">
-<?php if($hasPhoto): ?><img class="fardu-campus-photo" src="<?= Ui::h(Yii::$app->request->baseUrl) ?>/images/fardu-campus.jpg?v=3" alt="Farg‘ona davlat universitetining kirish darvozasi"><?php endif ?>
+<?php if($hasPhoto): ?><img class="fardu-campus-photo" src="<?= Ui::h(Yii::$app->request->baseUrl) ?>/images/fardu-campus.jpg?v=3" alt="Farg‘ona davlat universiteti binosi"><?php endif ?>
 <div class="fardu-photo-shade"></div><div class="fardu-photo-caption"><span class="academic-line"></span><h1>Ilm. Mehnat.<br>Natija.</h1><p>FarDU professor-o‘qituvchilari<br>faoliyatini baholash tizimi</p></div>
 </div>
 <div class="fardu-login-form"><div class="login-card"><div class="fardu-login-brand"><?= Ui::brandLogo() ?></div><span class="login-eyebrow">XODIM KABINETI</span><h2>Xush kelibsiz!</h2><p class="login-description">Davom etish uchun hisobingizga kiring.</p>

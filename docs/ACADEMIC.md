@@ -1,6 +1,6 @@
 # FarDU — tasdiqlangan akademik dizayn
 
-Kirish sahifasi: markazdagi ikki ustunli blok, chapda foydalanuvchi bergan FarDU darvozasi fotosurati va o‘ngda universitet logotipi hamda kirish formasi. Dashboard: to‘q ko‘k yon menyu, akademik ko‘k va oq kartochkalar, oltita ko‘rsatkich, jarayondagi arizalar, oylar bo‘yicha grafik, yo‘nalishlar va bo‘limlar reytingi.
+Kirish sahifasi: markazdagi ikki ustunli blok, chapda foydalanuvchi bergan FarDU binosi fotosurati va o‘ngda universitet logotipi hamda kirish formasi. Dashboard: to‘q ko‘k yon menyu, akademik ko‘k va oq kartochkalar, oltita ko‘rsatkich, jarayondagi arizalar, oylar bo‘yicha grafik, yo‘nalishlar va bo‘limlar reytingi.
 
 ## O‘rnatish
 
@@ -23,4 +23,6 @@ Windows o‘rnatuvchisi Linux muhitida bevosita sinovdan o‘tkazilmagan. Muqobi
 
 ## Ishlab chiqish holati
 
-Hisoblash/ish jarayonining 49 ta, HTTP oqimining 45 ta tekshiruvi muvaffaqiyatli bajarildi: jami 94 ta. Dashboard grafik yig‘indisi, davr va xodim doirasi uchun tekshiruvlar ham kiritilgan. Asl surat va logotip alohida fayl sifatida olinmaguncha brendlangan yakuniy paket yig‘ilmaydi.
+Hisoblash/ish jarayonining 49 ta, HTTP oqimining 45 ta tekshiruvi muvaffaqiyatli bajarildi: jami 94 ta. Dashboard grafik yig‘indisi, davr va xodim doirasi uchun tekshiruvlar ham kiritilgan. Asl surat va logotip foydalanuvchi yuborgan arxivdan olindi va dasturga baytma-bayt o‘zgartirmasdan qo‘shildi.
+
+FarDU asl fotosurati va logotipining yuklanishi brauzerda tekshirildi. Fotosurat panelni to‘ldirish uchun faqat CSS orqali joylashtiriladi; asl fayl o‘zgartirilmaydi. Mobil menyuda chiqish tugmasi ham bor.

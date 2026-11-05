@@ -2,6 +2,12 @@
 
 Yii2 asosidagi o‘zbekcha KPI tizimi. Yuborilgan mezonlar hujjati va 1C manbasi asosida **3 toifa, 4 faoliyat yo‘nalishi, 46 mezon va 139 ko‘rsatkich** kiritilgan.
 
+## Tasdiqlangan FarDU akademik yangilanishi
+
+`releases/KPI-FarDU-Academic-update.zip` — mavjud dastur ustidan qo‘llanadigan yangi akademik dizayn. Paketni alohida papkaga ochib, `INSTALL-ACADEMIC.bat`ni bosing va hozirgi dasturdagi `start-native.bat`ni tanlang. Keyin brauzerda Ctrl+F5 bosing. Baza, parollar va hujjatlar saqlanadi. Yo‘riqnoma: [FarDU akademik dizayni](docs/ACADEMIC.md).
+
+FarDU’ning asl foto va logotipi qo‘shilgan. Dashboard oltita statistik kartochka, haqiqiy oylik ball grafigi, arizalar va bo‘limlar reytingiga ega. Qisqa animatsiyalar operatsion tizimning harakatni kamaytirish sozlamasini hurmat qiladi. Kompyuter, 390/320 px mobil ko‘rinishlar va eski dastur nusxasiga qo‘llash tekshirilgan; Windows o‘rnatuvchisi Linux muhitida bevosita bajarilmagan.
+
 ## Mavjud dastur uchun yangi dizayn
 
 Ishlayotgan v1.1 dasturini qayta o‘rnatmasdan yangilash uchun `releases/KPI-Design-v2-update.zip`dan foydalaning. Uni alohida papkaga oching, `INSTALL-DESIGN.bat`ni bosing va mavjud dasturdagi `start-native.bat` faylini tanlang. Keyin brauzerda Ctrl+F5 bosing. Eski ko‘rinishning nusxasi avtomatik saqlanadi; baza, parollar va dalillar almashtirilmaydi. Batafsil yo‘riqnoma va qo‘lda ko‘chirish usuli: [Dizayn v2](docs/DIZAYN-V2.md).

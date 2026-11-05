@@ -38,7 +38,7 @@ $assetVersion='3.0.0';
 <?php endforeach ?>
 <?php if($user->isAdmin()): ?><div class="nav-label">ADMINISTRATOR</div><?php foreach($adminNavigation as [$url,$label,$icon]): $active=$route==='admin/'.$url; ?><?= Html::a(Ui::icon($icon).'<span>'.Ui::h($label).'</span>',['admin/'.$url],['class'=>$active?'nav-link active':'nav-link','aria-current'=>$active?'page':null]) ?><?php endforeach ?><?php endif ?>
 </nav>
-<div class="sidebar-bottom"><div class="workspace-note"><?= Ui::icon('check') ?><span>Shaffof baholash<small>Har bir natija dalil bilan.</small></span></div><div class="sidebar-version"><span class="dot"></span>FarDU KPI <span>Akademik</span></div></div>
+<div class="sidebar-bottom"><div class="mobile-signout"><?= Html::beginForm(['auth/logout'],'post') ?><button class="button secondary" type="submit"><?= Ui::icon('logout') ?>Tizimdan chiqish</button><?= Html::endForm() ?></div><div class="workspace-note"><?= Ui::icon('check') ?><span>Shaffof baholash<small>Har bir natija dalil bilan.</small></span></div><div class="sidebar-version"><span class="dot"></span>FarDU KPI <span>Akademik</span></div></div>
 </aside>
 <button class="menu-overlay" data-menu-close type="button" aria-label="Menyuni yopish" tabindex="-1" hidden></button>
 <div class="workspace" id="app-workspace"><header class="topbar">

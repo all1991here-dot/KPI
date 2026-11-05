@@ -14,6 +14,8 @@ with sync_playwright() as p:
    if page.locator('input[name=username]').count():break
   except Exception:time.sleep(.5)
  else:raise RuntimeError('Design service not ready')
+ assert page.locator('.fardu-login-brand img').evaluate('(img)=>img.complete && img.naturalWidth>0')
+ assert page.locator('.fardu-campus-photo').evaluate('(img)=>img.complete && img.naturalWidth>0')
  page.screenshot(path=str(out/'login.png'),full_page=True)
  page.locator('input[name=password]').fill('OnlyForIsolated-HttpTests2026!')
  page.get_by_role('button',name='Parolni ko‘rsatish',exact=True).click();assert page.locator('input[name=password]').get_attribute('type')=='text'
@@ -63,4 +65,10 @@ with sync_playwright() as p:
  page.set_viewport_size({'width':320,'height':720});page.goto(base+'/?r=kpi/index',wait_until='networkidle');assert page.evaluate('document.documentElement.scrollWidth==window.innerWidth')
  assert not errors,errors
  print('320px layout and browser JavaScript errors: passed')
+ page.get_by_role('button',name='Menyuni ochish',exact=True).click()
+ page.locator('.mobile-signout button').click();page.wait_for_load_state('networkidle')
+ assert page.locator('.fardu-login-brand img').evaluate('(img)=>img.complete && img.naturalWidth>0')
+ assert page.evaluate('document.documentElement.scrollWidth==window.innerWidth')
+ page.screenshot(path=str(out/'login-mobile.png'),full_page=True)
+ print('Original FarDU assets and mobile login: passed')
  browser.close()
