@@ -23,7 +23,7 @@ with sync_playwright() as p:
     goto('admin/structure');assert 'Browser Faculty' in page.locator('#departments').inner_text()
     page.screenshot(path=str(out/'structure.png'),full_page=True)
     goto('admin/users')
-    row=page.locator('tbody tr').filter(has=page.locator('td',has_text=re.compile('^http_teacher$')))
+    row=page.locator('tr[data-username="http_teacher"]')
     teacher_link=row.get_by_role('link',name='Tahrirlash').get_attribute('href')
     page.goto(base+teacher_link,wait_until='networkidle')
     page.locator('[data-org-level=university]').select_option(uni)
@@ -35,16 +35,13 @@ with sync_playwright() as p:
     page.goto(base+teacher_link,wait_until='networkidle')
     assert page.locator('[name=org_id]').input_value()==dept
     assert page.locator('[data-org-level=faculty]').input_value()==faculty
-    goto('admin/users')
-    row=page.locator('tbody tr').filter(has=page.locator('td',has_text=re.compile('^http_teacher$')))
-    row.locator('summary').click();image=row.locator('[data-employee-photo]').last
-    image.scroll_into_view_if_needed();page.wait_for_timeout(300)
+    page.goto(base+teacher_link,wait_until='networkidle')
+    image=page.locator('[data-employee-photo]').first;image.scroll_into_view_if_needed();page.wait_for_timeout(300)
     assert image.evaluate('(e)=>e.complete && e.naturalWidth>0')
-    assert row.get_by_text('teacher@example.test',exact=True).count()
+    assert page.locator('[name="profile[email]"]').input_value()=='teacher@example.test'
     page.screenshot(path=str(out/'employee-profile.png'),full_page=True)
-    # Error fallback must replace a broken image with text, never leave a broken icon.
     image.evaluate('(e)=>e.dispatchEvent(new Event("error"))');assert image.is_hidden()
-    assert row.get_by_text('Rasm yo‘q').count()
+    assert page.get_by_text('Rasm yo‘q').count()
     goto('auth/logout') if False else None
     context.clear_cookies();login('operator');page.goto(base+teacher_link,wait_until='networkidle')
     assert not page.locator('[name=role]').count()
@@ -52,7 +49,7 @@ with sync_playwright() as p:
     page.get_by_role('button',name='Saqlash',exact=True).click();page.wait_for_load_state('networkidle')
     page.goto(base+teacher_link,wait_until='networkidle')
     # Forge the hidden role POST rather than merely relying on an absent dropdown.
-    page.evaluate('''()=>{const f=document.querySelector('form[action*="admin%2Fusers"]');const i=document.createElement('input');i.name='role';i.value='expert';f.append(i);f.requestSubmit();}''')
+    page.evaluate('''()=>{const f=document.querySelector('form#user-details-form');const i=document.createElement('input');i.name='role';i.value='expert';f.append(i);f.requestSubmit();}''')
     page.wait_for_load_state('networkidle');assert 'faqat superadministrator' in page.locator('.alert.error').inner_text()
     context.clear_cookies();login('admin');page.goto(base+teacher_link,wait_until='networkidle')
     assert page.locator('[name=role]').input_value()=='teacher'

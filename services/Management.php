@@ -31,6 +31,48 @@ class Management
             $user->active=0;$user->deleted_at=time();$user->org_id=null;$user->auth_key=Yii::$app->security->generateRandomString();$user->save(false);
         });
     }
+    public static function setUserActive(User $actor,int $id,bool $active): void
+    {
+        if(!$actor->isAdmin())throw new \yii\web\ForbiddenHttpException('Administrator huquqi kerak.');
+        Yii::$app->db->transaction(function()use($actor,$id,$active){
+            $target=User::findOne(['id'=>$id,'deleted_at'=>null]);if(!$target)throw new DomainException('Hisob topilmadi.');
+            if($actor->role!=='superadmin' && $target->isAdmin())throw new \yii\web\ForbiddenHttpException('Administrator hisobini faqat superadministrator boshqaradi.');
+            if(!$active && $id===(int)$actor->id)throw new DomainException('O‘z hisobingizni bloklay olmaysiz.');
+            $target->active=$active?1:0;$target->auth_key=Yii::$app->security->generateRandomString();$target->save(false);
+            Catalog::audit((int)$actor->id,$active?'user_unblock':'user_block','User #'.$id);
+        });
+    }
+    public static function bulkPreview(User $actor,string $scope): array
+    {
+        self::authorize($actor);$assignments=[];
+        if($scope==='users')$records=(new Query())->select(['id','name','username','role'])->from('user')->where(['deleted_at'=>null])->andWhere(['<>','id',$actor->id])->orderBy('id')->all();
+        elseif($scope==='structure'){$records=(new Query())->from('org')->orderBy('id')->all();$assignments=(new Query())->select(['id','org_id'])->from('user')->where(['org_id'=>array_column($records,'id')])->orderBy('id')->all();}
+        else throw new DomainException('Ro‘yxat turi noto‘g‘ri.');
+        $fingerprint=hash_hmac('sha256',json_encode([$scope,(int)$actor->id,$records,$assignments],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),Yii::$app->params['cookieKey']);
+        return ['count'=>count($records),'records'=>$records,'assignments'=>$assignments,'affected_users'=>count($assignments),'fingerprint'=>$fingerprint];
+    }
+    public static function deleteAll(User $actor,string $scope,string $fingerprint): int
+    {
+        self::authorize($actor);
+        return Yii::$app->db->transaction(function()use($actor,$scope,$fingerprint){
+            $preview=self::bulkPreview($actor,$scope);
+            if(!hash_equals($preview['fingerprint'],$fingerprint))throw new DomainException('Ro‘yxat o‘zgargan. Yangi sonlarni tekshirib, qayta tasdiqlang.');
+            $ids=array_column($preview['records'],'id');if(!$ids)return 0;
+            Catalog::audit((int)$actor->id,'bulk_delete_'.$scope,json_encode(['records'=>$preview['records'],'assignments'=>$preview['assignments']],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR));
+            if($scope==='users'){foreach($ids as $id)self::deleteUser($actor,(int)$id);}
+            else {
+                Yii::$app->db->createCommand()->update('user',['org_id'=>null],['org_id'=>$ids])->execute();
+                $remaining=count($ids);
+                while($remaining){
+                    $parents=(new Query())->select('parent_id')->from('org')->where(['not',['parent_id'=>null]]);
+                    $leaves=(new Query())->select('id')->from('org')->where(['id'=>$ids])->andWhere(['not in','id',$parents])->column();
+                    if(!$leaves)throw new DomainException('Tuzilma bog‘lanishi o‘zgargan yoki aylanma bog‘lanish bor. Amal bekor qilindi.');
+                    Yii::$app->db->createCommand()->delete('org',['id'=>$leaves])->execute();$remaining-=count($leaves);
+                }
+            }
+            return count($ids);
+        });
+    }
     public static function saveIndicator(User $actor,array $data,?int $id=null): int
     {
         self::authorize($actor);

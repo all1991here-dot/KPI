@@ -11,9 +11,25 @@ class AdminController extends BaseController
     public function beforeAction($action){if(!parent::beforeAction($action))return false;$this->admin();return true;}
     public function actionUsers(?int $id=null)
     {
+        if($id){if(Yii::$app->request->isPost)return $this->actionUserEdit($id);return $this->redirect(['user-edit','id'=>$id]);}
+        if(Yii::$app->request->isPost)return $this->actionUserEdit();
+        $q=User::find()->where(['deleted_at'=>null]);$search=mb_substr(trim((string)Yii::$app->request->get('q','')),0,150);
+        if($search!=='')$q->andWhere(['or',['like','name',$search],['like','username',$search]]);
+        $status=(string)Yii::$app->request->get('status','');if(in_array($status,['active','inactive'],true))$q->andWhere(['active'=>$status==='active'?1:0]);
+        $org=(int)Yii::$app->request->get('org',0);if($org){$all=(new Query())->from('org')->all();$ids=[$org];do{$before=count($ids);foreach($all as $r)if(in_array((int)$r['parent_id'],$ids,true) && !in_array((int)$r['id'],$ids,true))$ids[]=(int)$r['id'];}while(count($ids)>$before);$q->andWhere(['org_id'=>$ids]);}
+        return $this->render('users',['rows'=>$q->orderBy('name')->all(),'orgs'=>(new Query())->from('org')->orderBy('name')->all()]);
+    }
+    public function actionUserEdit(?int $id=null)
+    {
         $edit=$id?User::findOne(['id'=>$id,'deleted_at'=>null]):null;if($id && !$edit)throw new \yii\web\NotFoundHttpException();
+        if(!$edit)\app\services\Management::authorize($this->actor());
+        if($edit && $this->actor()->role!=='superadmin' && $edit->isAdmin())throw new \yii\web\ForbiddenHttpException('Administrator hisobini faqat superadministrator boshqaradi.');
         if(Yii::$app->request->isPost && !$edit)\app\services\Management::authorize($this->actor());
         if(Yii::$app->request->isPost){try{
+            $operation=(string)Yii::$app->request->post('operation','save');
+            if($operation==='delete'){if(!$id)throw new DomainException('Avval hisob yarating.');\app\services\Management::deleteUser($this->actor(),$id);Yii::$app->session->setFlash('success','Foydalanuvchi o‘chirildi. Hujjatlar tarixi saqlandi.');return $this->redirect(['users']);}
+            if(in_array($operation,['block','unblock'],true)){if(!$id)throw new DomainException('Avval hisob yarating.');\app\services\Management::setUserActive($this->actor(),$id,$operation==='unblock');Yii::$app->session->setFlash('success',$operation==='block'?'Hisob bloklandi.':'Hisob faollashtirildi.');return $this->redirect(['user-edit','id'=>$id]);}
+            if($operation!=='save')throw new DomainException('Amal noto‘g‘ri.');
             $data=Yii::$app->request->post();$user=$edit?:new User();$super=$this->actor()->role==='superadmin';
             $previousRole=$edit?->role??'unassigned';
             $role=\app\services\AccountPolicy::role($this->actor(),$edit,array_key_exists('role',$data)?(string)$data['role']:null);
@@ -21,7 +37,7 @@ class AdminController extends BaseController
             if(!preg_match('/^[A-Za-z0-9_.-]{3,80}$/',$username))throw new DomainException('Login 3–80 ta lotin harfi, raqam, nuqta, tire yoki pastki chiziqdan iborat bo‘lsin.');
             if(!$name || mb_strlen($name)>200 || !isset(User::ROLES[$role]))throw new DomainException('Ism va rolni to‘g‘ri kiriting.');
             if($category!=='' && !isset(Catalog::CATEGORIES[$category]))throw new DomainException('Toifa noto‘g‘ri.');
-            $active=isset($data['active'])?1:0;
+            $active=$edit?(int)$edit->active:(!empty($data['active'])?1:0);
             if($edit && (int)$edit->id===(int)$this->actor()->id && (!$active || $role!==$edit->role))throw new DomainException('O‘z hisobingizni o‘chira yoki rolini o‘zgartira olmaysiz.');
             $orgId=(int)($data['org_id']??0);$org=$orgId?(new Query())->from('org')->where(['id'=>$orgId])->one():null;
             if($orgId && (!$edit || (int)$edit->org_id!==$orgId) && \app\services\Organization::blockedBy($orgId))throw new DomainException('Bloklangan bo‘limga yangi xodim biriktirilmaydi.');
@@ -35,9 +51,20 @@ class AdminController extends BaseController
             $user->degree=mb_substr(trim((string)($data['degree']??'')),0,50);$user->position=mb_substr(trim((string)($data['position']??'')),0,100);
             $profile=json_decode($edit?->hemis_profile??'{}',true)?:[];$incoming=Yii::$app->request->post('profile',[]);foreach(['academic_rank','employment_form','employment_staff','employee_type','phone','email'] as $key){if(!array_key_exists($key,$incoming))continue;$value=trim((string)($incoming[$key]??''));$profile[$key]=$value===''?null:mb_substr($value,0,200);}$user->hemis_profile=json_encode($profile,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
             if(!$edit)$user->created_at=time();if($password!==''){$user->setPassword($password);$user->must_change_password=1;}
-            $user->save(false);Catalog::audit((int)$this->actor()->id,'user_save',json_encode(['user_id'=>$user->id,'role_before'=>$previousRole,'role_after'=>$role,'org_id'=>$user->org_id],JSON_THROW_ON_ERROR));Yii::$app->session->setFlash('success','Foydalanuvchi saqlandi.');return $this->redirect(['users']);
+            $user->save(false);Catalog::audit((int)$this->actor()->id,'user_save',json_encode(['user_id'=>$user->id,'role_before'=>$previousRole,'role_after'=>$role,'org_id'=>$user->org_id],JSON_THROW_ON_ERROR));Yii::$app->session->setFlash('success','Foydalanuvchi saqlandi.');return $this->redirect(['user-edit','id'=>$user->id]);
+        }catch(\Throwable $e){if($e instanceof \yii\web\ForbiddenHttpException)throw $e;$this->message($e);}}
+        return $this->render('user-edit',['edit'=>$edit,'orgs'=>(new Query())->from('org')->orderBy('name')->all()]);
+    }
+    public function actionDeleteAll(string $scope)
+    {
+        \app\services\Management::authorize($this->actor());
+        if(!in_array($scope,['users','structure'],true))throw new \yii\web\BadRequestHttpException('Ro‘yxat turi noto‘g‘ri.');
+        if(Yii::$app->request->isPost){try{
+            if(Yii::$app->request->post('confirmation')!=='OCHIRISH')throw new DomainException('Tasdiqlash uchun OCHIRISH deb yozing.');
+            $count=\app\services\Management::deleteAll($this->actor(),$scope,(string)Yii::$app->request->post('fingerprint',''));
+            Yii::$app->session->setFlash('success',$count.' ta yozuv o‘chirildi. Hujjatlar tarixi saqlandi.');return $this->redirect([$scope==='users'?'users':'structure']);
         }catch(\Throwable $e){$this->message($e);}}
-        return $this->render('users',['edit'=>$edit,'rows'=>User::find()->where(['deleted_at'=>null])->orderBy('name')->all(),'orgs'=>(new Query())->from('org')->orderBy('name')->all()]);
+        return $this->render('delete-all',['scope'=>$scope,'preview'=>\app\services\Management::bulkPreview($this->actor(),$scope)]);
     }
     public function actionStructure(?int $id=null)
     {

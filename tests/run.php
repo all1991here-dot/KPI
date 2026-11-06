@@ -154,5 +154,22 @@ try{
  check((new Query())->from('org')->where(['id'=>$blockDepartment])->one()['email']==='department@example.test','all organization requisites saved on dedicated form');
  \app\services\Organization::setBlocked($admin,$blockFaculty,false);check(\app\services\Organization::blockedBy($blockDepartment)===null,'unblock restores department operations');
  Workflow::act($blockTeacher,$blockDraft,'submit');check(Workflow::application($blockDraft)['status']==='submitted','submission works after unblock');
+
+ $blockAccount=user('account_block_fixture','teacher',$blockDepartment);
+ \app\services\Management::setUserActive($ordinaryAdmin,(int)$blockAccount->id,false);check(User::findIdentity($blockAccount->id)===null,'user editor block prevents authentication');
+ \app\services\Management::setUserActive($ordinaryAdmin,(int)$blockAccount->id,true);check(User::findIdentity($blockAccount->id)!==null,'user editor unblock restores authentication');
+ denied(fn()=>\app\services\Management::setUserActive($admin,(int)$admin->id,false),'cannot block own current account');
+ try{\app\services\Management::bulkPreview($ordinaryAdmin,'users');throw new RuntimeException('Expected denial');}catch(\yii\web\ForbiddenHttpException $e){check(true,'ordinary admin cannot preview bulk deletion');}
+ $bulk=\app\services\Management::bulkPreview($admin,'users');$late=user('bulk_late_fixture','teacher',null);
+ denied(fn()=>\app\services\Management::deleteAll($admin,'users',$bulk['fingerprint']),'stale bulk confirmation cannot delete changed list');
+ check(User::findIdentity($late->id)!==null,'stale bulk confirmation leaves accounts untouched');
+ $documentsBefore=(int)(new Query())->from('application')->count();$bulk=\app\services\Management::bulkPreview($admin,'users');$removed=\app\services\Management::deleteAll($admin,'users',$bulk['fingerprint']);
+ check($removed===$bulk['count'] && (int)User::find()->where(['deleted_at'=>null])->count()===1 && User::findIdentity($admin->id)!==null,'bulk user delete preserves current superadmin only');
+ check((int)(new Query())->from('application')->count()===$documentsBefore,'bulk user delete preserves all documents');
+ $admin->org_id=$blockDepartment;$admin->save(false);$structureBulk=\app\services\Management::bulkPreview($admin,'structure');
+ check($structureBulk['affected_users']===1,'structure confirmation shows affected assignments');
+ $orgRemoved=\app\services\Management::deleteAll($admin,'structure',$structureBulk['fingerprint']);
+ check($orgRemoved===$structureBulk['count'] && (int)(new Query())->from('org')->count()===0,'bulk structure delete removes leaves before parents');
+ check(User::findOne($admin->id)->org_id===null && User::findIdentity($admin->id)!==null && (int)(new Query())->from('application')->count()===$documentsBefore,'bulk structure delete preserves accounts and documents and clears assignments');
  echo "\nSUCCESS: $count checks completed.\n";
 }catch(Throwable $e){fwrite(STDERR,$e."\n");exit(1);}

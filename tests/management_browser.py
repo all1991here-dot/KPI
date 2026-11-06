@@ -21,13 +21,13 @@ with sync_playwright() as p:
     page.locator('tbody tr').filter(has_text='BROWSER-CUSTOM').get_by_role('button',name='O‘chirish').click();page.wait_for_load_state('networkidle');assert not page.locator('tbody tr').filter(has_text='BROWSER-CUSTOM').count()
     goto('admin/structure-edit&kind=university');page.locator('[name=name]').fill('Browser delete university');page.get_by_role('button',name='Saqlash',exact=True).click();page.wait_for_load_state('networkidle')
     page.get_by_role('button',name='O‘chirish',exact=True).click();page.wait_for_load_state('networkidle');assert not page.locator('tbody tr').filter(has_text='Browser delete university').count()
-    goto('admin/users')
+    goto('admin/user-edit')
     for key,value in {'name':'Browser delete employee','username':'browser_delete_employee','password':password}.items():page.locator(f'input[name={key}]').fill(value)
     page.get_by_role('button',name='Saqlash',exact=True).click();page.wait_for_load_state('networkidle')
-    row=page.locator('tbody tr').filter(has=page.locator('td',has_text=re.compile('^browser_delete_employee$')));assert row.count()==1
-    row.get_by_role('button',name='O‘chirish').click();page.wait_for_load_state('networkidle');assert not page.locator('tbody tr').filter(has_text='browser_delete_employee').count()
+    assert page.locator('[name=username]').input_value()=='browser_delete_employee'
+    page.get_by_role('button',name='O‘chirish',exact=True).click();page.wait_for_load_state('networkidle');assert not page.locator('tbody tr').filter(has_text='browser_delete_employee').count()
     # Capture real target IDs before testing direct unauthorized requests.
-    target=page.locator('tbody tr').filter(has=page.locator('td',has_text=re.compile('^http_teacher$'))).get_by_role('link',name='Tahrirlash').get_attribute('href')
+    target=page.locator('tr[data-username="http_teacher"]').get_by_role('link',name='Tahrirlash').get_attribute('href')
     target_id=re.search(r'id=(\d+)',target).group(1)
     context.clear_cookies();login('operator');goto('admin/users')
     assert not page.locator('input[name=username]').count()
