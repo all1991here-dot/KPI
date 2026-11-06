@@ -5,15 +5,30 @@ use DomainException;
 use yii\db\Query;
 class Organization
 {
+    public const KINDS=['university'=>'Universitet','faculty'=>'Fakultet','department'=>'Kafedra','unit'=>'Bo‘lim'];
+    public static function allowedParent(string $kind,?string $parentKind): bool
+    {
+        return $kind==='university'?$parentKind===null:($kind==='faculty'?$parentKind==='university':(in_array($kind,['department','unit'],true) && in_array($parentKind,['university','faculty'],true)));
+    }
+    public static function lineage(?int $id,array $rows): array
+    {
+        $map=array_column($rows,null,'id');$chain=[];$seen=[];
+        while($id && isset($map[$id]) && !isset($seen[$id])){$seen[$id]=true;$row=$map[$id];$key=!empty($row['type_verified']??1)?$row['kind']:'unit';$chain[$key]??=$row;$id=$row['parent_id']?(int)$row['parent_id']:null;}
+        return $chain;
+    }
+
     public static function save(string $name,string $kind,?int $parent,?int $id=null): int
     {
         $name=trim($name);$parent=$parent?:null;
-        if($name==='' || mb_strlen($name)>200 || !in_array($kind,['university','faculty','department'],true))throw new DomainException('Nom va turini to‘g‘ri kiriting.');
+        if($name==='' || mb_strlen($name)>200 || !isset(self::KINDS[$kind]))throw new DomainException('Nom va turini to‘g‘ri kiriting.');
         $old=$id?(new Query())->from('org')->where(['id'=>$id])->one():null;
         if($id && !$old)throw new DomainException('Bo‘lim topilmadi.');
-        if($old && $old['kind']!==$kind)throw new DomainException('Mavjud bo‘lim turi o‘zgartirilmaydi.');
+        if($old && $old['kind']==='university' && $kind!=='university')throw new DomainException('Universitet turini almashtirib bo‘lmaydi.');
+        if($id && $parent===$id)throw new DomainException('Bo‘lim o‘ziga biriktirilmaydi.');
+        if($old && $old['kind']!==$kind){foreach((new Query())->from('org')->where(['parent_id'=>$id])->all() as $child)if(!self::allowedParent($child['kind'],$kind))throw new DomainException('Avval quyi tuzilmalarni mos yuqori bo‘limga ko‘chiring.');}
         $p=$parent?(new Query())->from('org')->where(['id'=>$parent])->one():null;
-        if(($kind==='university' && $parent) || ($kind==='faculty' && (!$p || $p['kind']!=='university')) || ($kind==='department' && (!$p || $p['kind']!=='faculty')))throw new DomainException('Avval universitetni, keyin unga fakultetni, fakultetga kafedrani biriktiring.');
+        if(!self::allowedParent($kind,$p?$p['kind']:null))throw new DomainException('Fakultet universitetga, kafedra va bo‘lim universitet yoki fakultetga biriktiriladi.');
+        if($p && $p['kind']==='faculty' && empty($p['type_verified']))throw new DomainException('Avval yuqori fakultetning turini tasdiqlang.');
         $values=['name'=>$name,'kind'=>$kind,'parent_id'=>$parent];$cmd=Yii::$app->db->createCommand();
         if($id)$cmd->update('org',$values,['id'=>$id])->execute();else{$cmd->insert('org',$values)->execute();$id=(int)Yii::$app->db->lastInsertID;}
         return $id;
@@ -41,6 +56,7 @@ class Organization
         return Yii::$app->db->transaction(function()use($actor,$data,$id,$kind){
             $old=$id?(new Query())->from('org')->where(['id'=>$id])->one():null;
             if($id && !$old)throw new DomainException('Bo‘lim topilmadi.');
+            if($old && $old['kind']!==$kind && $actor->role!=='superadmin')throw new \yii\web\ForbiddenHttpException('Tuzilma turini faqat superadministrator o‘zgartiradi.');
             $parent=(int)($data['parent_id']??0);
             if($old && $actor->role!=='superadmin' && (int)$old['parent_id']!==$parent && self::blockedBy((int)$old['id']))throw new \yii\web\ForbiddenHttpException('Bloklangan bo‘limni boshqa tuzilmaga faqat superadministrator ko‘chiradi.');
             if($parent && (!$old || (int)$old['parent_id']!==$parent) && self::blockedBy($parent))throw new DomainException('Bloklangan universitet yoki fakultetga yangi bo‘lim biriktirilmaydi.');
@@ -49,6 +65,7 @@ class Organization
             if($actor->role!=='superadmin' && $hemis!==(string)($old['hemis_id']??''))throw new \yii\web\ForbiddenHttpException('HEMIS bog‘lanishini faqat superadministrator o‘zgartiradi.');
             if($hemis!=='' && (new Query())->from('org')->where(['hemis_id'=>$hemis])->andFilterWhere($id?['<>','id',$id]:[])->exists())throw new DomainException('HEMIS ID boshqa bo‘limda mavjud.');
             $values=['hemis_id'=>$hemis?:null];
+            if($actor->role==='superadmin'){$values['type_verified']=1;$values['needs_review']=0;$values['classification_note']=null;$values['manual_structure']=!empty($data['manual_structure']) || ($old && ($old['kind']!==$kind || (int)$old['parent_id']!==$parent))?1:0;}
             foreach(['short_name'=>120,'code'=>80,'head_name'=>200,'phone'=>80,'email'=>200,'address'=>500,'notes'=>10000] as $key=>$max){$value=trim((string)($data[$key]??$old[$key]??''));if(mb_strlen($value)>$max)throw new DomainException('Rekvizit uzunligi ruxsat etilgan chegaradan oshdi.');$values[$key]=$value===''?null:$value;}
             if($values['email'] && !filter_var($values['email'],FILTER_VALIDATE_EMAIL))throw new DomainException('Email manzilini to‘g‘ri kiriting.');
             $saved=self::save((string)($data['name']??''),$kind,$parent?:null,$id);

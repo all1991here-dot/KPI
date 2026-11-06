@@ -42,6 +42,7 @@ class AdminController extends BaseController
             $orgId=(int)($data['org_id']??0);$org=$orgId?(new Query())->from('org')->where(['id'=>$orgId])->one():null;
             if($orgId && (!$edit || (int)$edit->org_id!==$orgId) && \app\services\Organization::blockedBy($orgId))throw new DomainException('Bloklangan bo‘limga yangi xodim biriktirilmaydi.');
             if($orgId && !$org)throw new DomainException('Bo‘lim topilmadi.');
+            if($org && empty($org['type_verified']) && in_array($role,['head','faculty'],true))throw new DomainException('Avval tuzilma turini tasdiqlang yoki to‘g‘ri fakultet/kafedra tanlang.');
             if(($role==='head' && (!$org || $org['kind']!=='department')) || ($role==='faculty' && (!$org || $org['kind']!=='faculty')))throw new DomainException('Kafedra mudiriga kafedra, fakultet mas’uliga fakultet tanlang.');
             if(User::find()->where(['username'=>$username])->andFilterWhere($id?['<>','id',$id]:[])->exists())throw new DomainException('Bu login band.');
             $password=(string)($data['password']??'');if((!$edit || $password!=='') && (strlen($password)<12 || strlen($password)>128))throw new DomainException('Parol 12–128 belgi bo‘lsin.');
@@ -77,7 +78,7 @@ class AdminController extends BaseController
         $edit=$id?(new Query())->from('org')->where(['id'=>$id])->one():null;
         if($id && !$edit)throw new \yii\web\NotFoundHttpException();
         if(!$edit)\app\services\Management::authorize($this->actor());
-        $kind=$edit['kind']??(string)Yii::$app->request->post('kind',$kind);if(!in_array($kind,['university','faculty','department'],true))throw new \yii\web\BadRequestHttpException('Tuzilma turi noto‘g‘ri.');
+        $kind=(string)Yii::$app->request->post('kind',$edit['kind']??$kind);if(!isset(\app\services\Organization::KINDS[$kind]))throw new \yii\web\BadRequestHttpException('Tuzilma turi noto‘g‘ri.');
         if(Yii::$app->request->isPost){try{
             $operation=(string)Yii::$app->request->post('operation','save');
             if($operation==='delete'){if(!$id)throw new DomainException('Avval bo‘lim yarating.');\app\services\Management::deleteOrganization($this->actor(),$id);Yii::$app->session->setFlash('success','Bo‘lim o‘chirildi.');return $this->redirect(['structure']);}
@@ -170,7 +171,8 @@ class AdminController extends BaseController
             elseif(in_array($op,['structure','employees'],true)){
                 $items=\app\services\Hemis::fetch($op);$result=$op==='structure'?\app\services\Hemis::applyStructure($items,(int)Yii::$app->request->post('university_id')?:null):\app\services\Hemis::applyEmployees($items);
                 if($op==='employees'){$result['finished_at']=date('Y-m-d H:i:s');file_put_contents(Yii::getAlias('@runtime/hemis-import-last.json'),json_encode($result,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),LOCK_EX);}
-                $message='Import: '.$result['saved'].' saqlandi, '.$result['skipped'].' o‘tkazildi.'.(!empty($result['unlinked'])?' Bolimga biriktirilmagan: '.$result['unlinked'].'. Avval tuzilmani import qiling, keyin xodimlarni qayta yuklang.':'');
+                if($op==='structure'){$message='Tuzilma importi: '.$result['faculties'].' fakultet, '.$result['departments'].' kafedra, '.$result['units'].' bo‘lim. Turi tuzatilgan: '.$result['reclassified'].'. Tekshirish kerak: '.$result['needs_review'].'. ';}else $message='';
+                $message.='Import: '.$result['saved'].' saqlandi, '.$result['skipped'].' o‘tkazildi.'.(!empty($result['unlinked'])?' Bolimga biriktirilmagan: '.$result['unlinked'].'. Avval tuzilmani import qiling, keyin xodimlarni qayta yuklang.':'');
             }else throw new DomainException('Amal noma’lum.');
             if(in_array($op,['structure','employees'],true) && !empty($result['reasons'])){foreach($result['reasons'] as $reason=>$count)$message.=' '.$reason.': '.$count.'.';}
             Catalog::audit((int)$this->actor()->id,'hemis_'.$op,$message);Yii::$app->session->setFlash($op==='employees' && empty($result['saved'])?'warning':'success',$message);return $this->refresh();

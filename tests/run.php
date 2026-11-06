@@ -4,7 +4,7 @@ Yii::setAlias('@app',dirname(__DIR__));
 $dir=dirname(__DIR__).'/runtime/tests-'.bin2hex(random_bytes(6));mkdir($dir,0700,true);
 $config=require dirname(__DIR__).'/config/console.php';$config['runtimePath']=$dir;$config['components']['db']=['class'=>yii\db\Connection::class,'dsn'=>'sqlite:'.$dir.'/test.sqlite'];
 new yii\console\Application($config);
-require dirname(__DIR__).'/migrations/m261105_000001_initial.php';ob_start();(new m261105_000001_initial())->up();ob_end_clean();require dirname(__DIR__).'/migrations/m261106_000001_employee_profile.php';ob_start();(new m261106_000001_employee_profile())->up();ob_end_clean();require dirname(__DIR__).'/migrations/m261106_000002_superadmin_management.php';ob_start();(new m261106_000002_superadmin_management())->up();ob_end_clean();require dirname(__DIR__).'/migrations/m261106_000003_organization_details.php';ob_start();(new m261106_000003_organization_details())->up();ob_end_clean();Yii::$app->db->schema->refresh();
+require dirname(__DIR__).'/migrations/m261105_000001_initial.php';ob_start();(new m261105_000001_initial())->up();ob_end_clean();require dirname(__DIR__).'/migrations/m261106_000001_employee_profile.php';ob_start();(new m261106_000001_employee_profile())->up();ob_end_clean();require dirname(__DIR__).'/migrations/m261106_000002_superadmin_management.php';ob_start();(new m261106_000002_superadmin_management())->up();ob_end_clean();require dirname(__DIR__).'/migrations/m261106_000003_organization_details.php';ob_start();(new m261106_000003_organization_details())->up();ob_end_clean();require dirname(__DIR__).'/migrations/m261106_000004_organization_types.php';ob_start();(new m261106_000004_organization_types())->up();ob_end_clean();Yii::$app->db->schema->refresh();
 use app\services\{Catalog,Workflow,ScoreCalculator,Access,Hemis};use app\models\User;use yii\db\Query;
 $count=0;
 function check(bool $condition,string $name):void{global $count;if(!$condition)throw new RuntimeException('FAIL '.$name);$count++;echo "PASS $name\n";}
@@ -60,7 +60,7 @@ try{
  $r['calc_type']='Ballgacha';$r['upper_score']=5;check(ScoreCalculator::calculate($r,1,4)===400,'expert score accepted');denied(fn()=>ScoreCalculator::calculate($r,1,6),'expert upper bound');
  $r['calc_type']='PulFormulasi';$r['base_score']=5;$r['cap_score']=null;$r['formula_divisor']=100000000;$r['formula_mode']='proportional';check(ScoreCalculator::calculate($r,1,null,0,0,150000000)===750,'proportional grant formula');$r['formula_mode']='floor';check(ScoreCalculator::calculate($r,1,null,0,0,150000000)===500,'whole-block grant formula');
  $r['calc_type']='XirshIndeksi';$r['base_score']=1;check(ScoreCalculator::calculate($r,1,null,0,0,7)===700,'H index configured rule');denied(fn()=>ScoreCalculator::calculate($r,1,null,0,0,1.5),'H index integer only');
- $structure=[['id'=>100,'name'=>'Imported Faculty','structureType'=>['code'=>'12']],['id'=>101,'name'=>'Imported Department','parent'=>100,'structureType'=>['code'=>'13']]];
+ $structure=[['id'=>100,'name'=>'Imported Faculty','structureType'=>['code'=>'12','name'=>'Fakultet']],['id'=>101,'name'=>'Imported Department','parent'=>100,'structureType'=>['code'=>'13','name'=>'Kafedra']]];
  check(Hemis::applyStructure($structure)['saved']===2,'HEMIS structure fixture');check(Hemis::applyStructure($structure)['saved']===2,'HEMIS structure idempotent');check((int)(new Query())->from('org')->where(['hemis_id'=>'101'])->count()===1,'no duplicate imported org');
  $employees=[['id'=>501,'full_name'=>'Import Test','department'=>['id'=>101]]];check(Hemis::applyEmployees($employees)['saved']===1,'HEMIS employee fixture');Hemis::applyEmployees($employees);$imported=User::findOne(['hemis_id'=>'501']);check(!$imported->active,'imported accounts inactive by default');check((int)User::find()->where(['hemis_id'=>'501'])->count()===1,'no duplicate imported employee');
  $snapshot=Workflow::application($id)['rule_snapshot'];Yii::$app->db->createCommand()->update('period_rule',['base_score'=>999,'revision'=>2],['period_id'=>$period,'indicator_id'=>$patent['id']])->execute();check(Workflow::application($id)['rule_snapshot']===$snapshot && (int)Workflow::application($id)['score_cents']===500,'approved snapshot remains immutable');
@@ -87,7 +87,7 @@ try{
  check(\app\services\AccountPolicy::role($admin,$teacher,'expert')==='expert','superadmin can assign role');
  check(\app\services\AccountPolicy::role($admin,$teacher,'unassigned')==='unassigned','superadmin can remove role');
  denied(fn()=>\app\services\Organization::save('Bad faculty','faculty',$department),'faculty cannot attach to department');
- denied(fn()=>\app\services\Organization::save('Bad department','department',$university),'department cannot attach directly to university');
+ denied(fn()=>\app\services\Organization::save('Bad department','department',$department),'department cannot attach to another department');
  $root=\app\services\Organization::save('Manual University','university',null);
  $fac=\app\services\Organization::save('Manual Faculty','faculty',$root);
  $dep=\app\services\Organization::save('Manual Department','department',$fac);
@@ -115,7 +115,7 @@ try{
 
  $manualFaculty=\app\services\Organization::save('Matched Faculty','faculty',$root);
  $manualDepartment=\app\services\Organization::save('Matched Department','department',$manualFaculty);
- Hemis::applyStructure([['id'=>901,'name'=>'Matched Faculty','structureType'=>['code'=>'12']],['id'=>902,'name'=>'Matched Department','structureType'=>['code'=>'13'],'parent'=>['id'=>901]]],$root);
+ Hemis::applyStructure([['id'=>901,'name'=>'Matched Faculty','structureType'=>['code'=>'12','name'=>'Fakultet']],['id'=>902,'name'=>'Matched Department','structureType'=>['code'=>'13','name'=>'Kafedra'],'parent'=>['id'=>901]]],$root);
  check((int)(new Query())->from('org')->where(['hemis_id'=>'901'])->scalar()===$manualFaculty,'HEMIS reuses matching manual faculty');
  check((int)(new Query())->from('org')->where(['hemis_id'=>'902'])->scalar()===$manualDepartment,'HEMIS reuses matching manual department');
 
@@ -143,7 +143,7 @@ try{
  check(\app\services\Organization::blockedBy($blockDepartment)['id']==$blockFaculty,'faculty block inherited by department');
  Yii::$app->db->createCommand()->update('org',['hemis_id'=>'6001'],['id'=>$blockFaculty])->execute();Yii::$app->db->createCommand()->update('org',['hemis_id'=>'6002'],['id'=>$blockDepartment])->execute();
  $blockedImport=Hemis::applyEmployees([['id'=>6003,'full_name'=>'Blocked assignment fixture','department'=>['id'=>6002]]]);check(User::findOne(['hemis_id'=>'6003'])->org_id===null && !empty($blockedImport['reasons']['Bo‘lim bloklangan']),'HEMIS cannot bypass blocked employee assignment');
- $blockedStructure=Hemis::applyStructure([['id'=>6004,'name'=>'Blocked new department','structureType'=>['code'=>'13'],'parent'=>6001]],$blockRoot);check($blockedStructure['saved']===0 && $blockedStructure['skipped']===1,'HEMIS cannot create child under blocked faculty');
+ $blockedStructure=Hemis::applyStructure([['id'=>6004,'name'=>'Blocked new department','structureType'=>['code'=>'13','name'=>'Kafedra'],'parent'=>6001]],$blockRoot);check($blockedStructure['saved']===0 && $blockedStructure['skipped']===1,'HEMIS cannot create child under blocked faculty');
  try{\app\services\Organization::saveDetails($ordinaryAdmin,['name'=>'Move around block','parent_id'=>$fac],$blockDepartment,'department');throw new RuntimeException('Expected block protection');}catch(\yii\web\ForbiddenHttpException $e){check(true,'admin cannot escape inherited block by reparenting');}
 
  denied(fn()=>Workflow::save($blockTeacher,['period_id'=>$blockPeriod,'indicator_id'=>$cap['id'],'title'=>'Blocked new','activity_date'=>'2026-06-01','quantity'=>1],[]),'blocked department prevents new activities');

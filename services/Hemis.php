@@ -56,29 +56,44 @@ class Hemis
             $university=$universityId?(new Query())->from('org')->where(['id'=>$universityId,'kind'=>'university'])->one():(count($roots)===1?$roots[0]:null);
             if(!$university || trim($university['name'])==='Universitet')throw new DomainException('Avval universitet nomini qolda toldiring va import uchun universitetni tanlang.');
             if(Organization::blockedBy((int)$university['id']))throw new DomainException('Universitet bloklangan. Avval blokdan chiqaring.');
-            $map=[];$result=['saved'=>0,'skipped'=>0];
-            foreach($items as $item){$id=self::id($item['id']??null);if($id)$map[$id]=$item;}
-            foreach(['12'=>'faculty','13'=>'department'] as $code=>$kind){
-                foreach($map as $id=>$item){
-                    $type=$item['structureType']??$item['structure_type']??[];$typeCode=(string)(is_array($type)?($type['code']??$type['id']??''):$type);
-                    if($typeCode!==(string)$code)continue;
-                    $name=trim((string)($item['name']??''));if(!$name){$result['skipped']++;continue;}
-                    $parent=$university['id'];
-                    if($kind==='department'){
-                        $parentHemis=self::id($item['parent']??null);$seen=[];$faculty=null;
-                        while($parentHemis && !isset($seen[$parentHemis])){
-                            $seen[$parentHemis]=true;$faculty=(new Query())->from('org')->where(['hemis_id'=>$parentHemis,'kind'=>'faculty'])->one();if($faculty)break;$parentHemis=self::id($map[$parentHemis]['parent']??null);
-                        }
-                        if(!$faculty){$result['skipped']++;continue;}$parent=$faculty['id'];
+            $map=[];$result=['received'=>count($items),'saved'=>0,'skipped'=>0,'reclassified'=>0,'needs_review'=>0,'faculties'=>0,'departments'=>0,'units'=>0,'reasons'=>[]];
+            foreach($items as $item){if(!is_array($item))continue;$id=self::id($item['id']??null);if($id && self::text($item['name']??null))$map[$id]=$item;else $result['skipped']++;}
+            $types=OrganizationClassifier::classify($map);$local=[];
+            foreach($types as $id=>&$type){$manual=(new Query())->from('org')->where(['hemis_id'=>(string)$id,'manual_structure'=>1])->one();if($manual && $manual['kind']!=='university'){$type['kind']=$manual['kind'];$type['verified']=1;$type['review']=0;}}unset($type);
+            foreach($types as $id=>$type)if($type['kind']==='university')$local[$id]=(int)$university['id'];
+            // Faculties must exist before any departments or other units are linked.
+            foreach(['faculty','department','unit'] as $stage){foreach($map as $id=>$item){
+                $type=$types[$id];if($type['kind']!==$stage)continue;
+                $name=self::text($item['name'],200);$old=(new Query())->from('org')->where(['hemis_id'=>(string)$id])->one();
+                if($old && $old['kind']==='university'){$result['skipped']++;$result['reasons']['Universitet ID si boshqa tuzilmada']=($result['reasons']['Universitet ID si boshqa tuzilmada']??0)+1;continue;}
+                $parent=(int)$university['id'];$sourceParent=self::id($item['parent']??$item['parent_id']??$item['_parent']??null);
+                if($stage!=='faculty'){
+                    $walk=$sourceParent;$seen=[];
+                    while($walk && !isset($seen[$walk])){
+                        $seen[$walk]=true;
+                        $candidate=isset($local[$walk])?(new Query())->from('org')->where(['id'=>$local[$walk]])->one():(new Query())->from('org')->where(['hemis_id'=>$walk])->one();
+                        $planned=$types[$walk]??null;
+                        if($candidate && $candidate['kind']==='faculty' && !empty($candidate['type_verified']) && (!$planned || $planned['kind']==='faculty')){$parent=(int)$candidate['id'];break;}
+                        $walk=self::id($map[$walk]['parent']??$map[$walk]['parent_id']??$map[$walk]['_parent']??null);
                     }
-                    $old=(new Query())->from('org')->where(['hemis_id'=>(string)$id])->one();
-                    if(!$old){$manual=(new Query())->from('org')->where(['name'=>$name,'kind'=>$kind,'parent_id'=>$parent,'hemis_id'=>null])->all();if(count($manual)>1){$result['skipped']++;continue;}if(count($manual)===1)$old=$manual[0];}
-                    if(Organization::blockedBy((int)$parent) && (!$old || (int)$old['parent_id']!==(int)$parent)){$result['skipped']++;$result['reasons']['Yuqori bo‘lim bloklangan']=($result['reasons']['Yuqori bo‘lim bloklangan']??0)+1;continue;}
-                    if($old && $old['kind']!==$kind){$result['skipped']++;continue;}
-                    $values=['hemis_id'=>(string)$id,'name'=>mb_substr($name,0,200),'kind'=>$kind,'parent_id'=>$parent];$command=Yii::$app->db->createCommand();
-                    if($old)$command->update('org',$values,['id'=>$old['id']])->execute();else $command->insert('org',$values)->execute();$result['saved']++;
+                    if($stage==='department' && $parent===(int)$university['id'] && !isset($local[$sourceParent??''])){$type['review']=1;$type['note']=trim($type['note'].' Fakultet HEMISdan aniqlanmadi; bog‘lanishni tekshiring.');}
                 }
-            }
+                $kind=$stage;
+                if($old && !empty($old['manual_structure'])){$kind=$old['kind'];$parent=(int)$old['parent_id'];$type['review']=0;$type['verified']=1;$type['note']='Tur va yuqori bo‘lim qo‘lda tasdiqlangan.';}
+                if(!$old){$manual=(new Query())->from('org')->where(['name'=>$name,'kind'=>$kind,'parent_id'=>$parent,'hemis_id'=>null])->all();if(count($manual)>1){$result['skipped']++;continue;}if(count($manual)===1)$old=$manual[0];}
+                if(Organization::blockedBy($parent) && (!$old || (int)$old['parent_id']!==$parent)){$result['skipped']++;$result['reasons']['Yuqori bo‘lim bloklangan']=($result['reasons']['Yuqori bo‘lim bloklangan']??0)+1;continue;}
+                if($old && $old['kind']!==$kind){
+                    foreach((new Query())->from('org')->where(['parent_id'=>$old['id']])->all() as $child){
+                        $sourceId=$child['hemis_id'];
+                        if(!Organization::allowedParent($child['kind'],$kind) && (!$sourceId || !isset($map[$sourceId]) || !empty($child['manual_structure']))){$kind=$old['kind'];$parent=(int)$old['parent_id'];$type['review']=1;$type['verified']=0;$type['note']='Quyi tuzilmalar sabab tur avtomatik almashtirilmadi. Bog‘lanishlarni tekshiring.';break;}
+                    }
+                }
+                $values=['hemis_id'=>(string)$id,'name'=>$name,'kind'=>$kind,'parent_id'=>$parent,'hemis_type_code'=>$type['type_code'],'hemis_type_name'=>$type['type_name'],'hemis_parent_id'=>$sourceParent,'type_verified'=>$type['verified'],'needs_review'=>$type['review'],'classification_note'=>$type['note']?:null];
+                if($old){Yii::$app->db->createCommand()->update('org',$values,['id'=>$old['id']])->execute();$local[$id]=(int)$old['id'];if($old['kind']!==$kind){$result['reclassified']++;Catalog::audit(null,'org_hemis_reclassified',json_encode(['id'=>$old['id'],'old_kind'=>$old['kind'],'kind'=>$kind,'parent_id'=>$parent],JSON_THROW_ON_ERROR));}}
+                else{Yii::$app->db->createCommand()->insert('org',$values)->execute();$local[$id]=(int)Yii::$app->db->lastInsertID;}
+                $result['saved']++;$result[['faculty'=>'faculties','department'=>'departments','unit'=>'units'][$kind]]++;if($type['review'])$result['needs_review']++;
+            }}
+
             return $result;
         });
     }
