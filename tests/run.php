@@ -18,6 +18,12 @@ function fixture(User $u,int $period,int $indicator,string $name='Faoliyat',int 
 function rule(string $code):array{return(new Query())->from('indicator')->where(['code'=>$code])->one();}
 function approve(User $head,User $expert,User $admin,int $id):void{Workflow::act($head,$id,'approve','Kafedra tasdiqladi');Workflow::act($expert,$id,'approve','Ekspert tasdiqladi');Workflow::act($admin,$id,'approve','Yakuniy tasdiq');}
 try{
+ Hemis::configure('https://student.fdu.uz/',' TestOnly-Hemis-Key ');
+ $stored=Hemis::settings();check(!str_contains(file_get_contents(Yii::getAlias('@runtime/hemis.json')),'TestOnly-Hemis-Key'),'HEMIS token encrypted on disk');
+ check(Yii::$app->security->decryptByKey(base64_decode($stored['token']),Yii::$app->params['cookieKey'])==='TestOnly-Hemis-Key','HEMIS token survives reload');
+ Hemis::configure('student.fdu.uz','');check(Hemis::settings()===$stored,'blank HEMIS token preserves saved key');
+ denied(fn()=>Hemis::configure('other.example.uz',''),'changed HEMIS domain requires new key');
+ check(Hemis::settings()===$stored,'failed HEMIS configuration preserves saved key');
  check(Catalog::import()===139,'139 indicators imported');check(Catalog::import()===0,'catalog import idempotent');
  check((int)(new Query())->from('indicator')->where(['policy_required'=>1])->count()===96,'96 policy decisions preserved');
  $university=insert('org',['name'=>'U','kind'=>'university']);$faculty=insert('org',['name'=>'F','kind'=>'faculty','parent_id'=>$university]);$department=insert('org',['name'=>'D','kind'=>'department','parent_id'=>$faculty]);$otherOrg=insert('org',['name'=>'Other D','kind'=>'department','parent_id'=>$faculty]);

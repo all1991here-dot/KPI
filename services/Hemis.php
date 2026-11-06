@@ -12,6 +12,7 @@ class Hemis
     }
     public static function configure(string $host,string $token): void
     {
+        $token=trim($token);
         $host=strtolower(trim($host));$host=preg_replace('~^https://~','',$host);$host=rtrim($host,'/');
         if(!preg_match('/^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/',$host))throw new DomainException('HEMIS uchun HTTPS domen nomini kiriting, yo‘l yoki port kiritmang.');
         $old=self::settings();
@@ -22,7 +23,14 @@ class Hemis
             if(strlen($token)>4096 || preg_match('/[\r\n]/',$token))throw new DomainException('API kaliti formati noto‘g‘ri.');
             $encrypted=base64_encode(Yii::$app->security->encryptByKey($token,Yii::$app->params['cookieKey']));
         }
-        $path=Yii::getAlias('@runtime/hemis.json');file_put_contents($path,json_encode(['host'=>$host,'token'=>$encrypted]));chmod($path,0600);
+        $path=Yii::getAlias('@runtime/hemis.json');
+        $temporary=tempnam(dirname($path),'hemis-');
+        if($temporary===false)throw new DomainException('HEMIS sozlamalarini saqlash uchun runtime papkasiga yozish ruxsati kerak.');
+        try {
+            chmod($temporary,0600);
+            $contents=json_encode(['host'=>$host,'token'=>$encrypted],JSON_THROW_ON_ERROR);
+            if(file_put_contents($temporary,$contents,LOCK_EX)!==strlen($contents) || !rename($temporary,$path))throw new DomainException('HEMIS sozlamalari saqlanmadi. Avvalgi sozlamalar saqlangan holatda qoldi.');
+        } finally { if(is_file($temporary))unlink($temporary); }
     }
     public static function fetch(string $kind): array
     {
@@ -31,12 +39,7 @@ class Hemis
         $path=$kind==='employees'?'employee-list?type=all&':'department-list?';$rows=[];
         for($page=1;$page<=200;$page++){
             $url='https://'.$s['host'].'/rest/v1/data/'.$path.'limit=200&page='.$page;
-            $curl=curl_init($url);curl_setopt_array($curl,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_FOLLOWLOCATION=>false,CURLOPT_TIMEOUT=>45,CURLOPT_CONNECTTIMEOUT=>15,CURLOPT_HTTPHEADER=>['Accept: application/json','Authorization: Bearer '.$token],CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2]);
-            $ca=getenv('KPI_CA_BUNDLE');if($ca && is_file($ca))curl_setopt($curl,CURLOPT_CAINFO,$ca);
-            $data='';curl_setopt($curl,CURLOPT_WRITEFUNCTION,function($c,$chunk)use(&$data){if(strlen($data)+strlen($chunk)>8*1024*1024)return 0;$data.=$chunk;return strlen($chunk);});
-            $ok=curl_exec($curl);$status=(int)curl_getinfo($curl,CURLINFO_HTTP_CODE);curl_close($curl);
-            if($ok===false || $status!==200)throw new DomainException('HEMIS javobi olinmadi (HTTP '.$status.'). Domen ruxsati va API kalitini tekshiring.');
-            $json=json_decode($data,true,64,JSON_THROW_ON_ERROR);if(isset($json['success']) && !$json['success'])throw new DomainException('HEMIS so‘rovni rad etdi.');
+            $json=HemisHttp::get($url,$token);if(isset($json['success']) && !$json['success'])throw new DomainException('HEMIS so‘rovni rad etdi.');
             $items=$json['data']['items']??$json['items']??null;if(!is_array($items))throw new DomainException('HEMIS javob tuzilmasi kutilgan formatda emas.');
             array_push($rows,...$items);$total=$json['data']['pagination']['pageCount']??$json['pagination']['pageCount']??null;
             if(!$items || ($total!==null && $page>=(int)$total) || ($total===null && count($items)<200))return $rows;
