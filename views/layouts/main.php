@@ -7,6 +7,7 @@ $route=$this->context->route;
 $mine=(bool)Yii::$app->request->get('mine');$queue=(bool)Yii::$app->request->get('queue');$appeals=(bool)Yii::$app->request->get('appeals');$isApplications=$route==='kpi/applications';
 $navigation=[['kpi/index','Boshqaruv paneli','grid'],['kpi/create','Yangi faoliyat','plus'],['kpi/criteria','KPI mezonlari','book'],['kpi/reports','Reyting va hisobot','chart'],['kpi/notifications','Bildirishnomalar','bell'],['kpi/profile','Shaxsiy profil','user']];
 $adminNavigation=[['users','Foydalanuvchilar','users'],['structure','Universitet tuzilmasi','building'],['periods','Baholash davrlari','calendar'],['rules','Hisoblash qoidalari','settings'],['route','Tasdiqlash bosqichlari','route'],['hemis','HEMIS integratsiyasi','link'],['audit','Amallar jurnali','history']];
+if($user && $user->role==='superadmin')$adminNavigation[]=['indicators','Mezonlarni boshqarish','book'];
 $pageTitle=str_replace([' · KPI',' · FarDU KPI'],'',$this->title?:'Boshqaruv paneli');
 $assetVersion='3.0.0';
 ?>

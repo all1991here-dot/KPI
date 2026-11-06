@@ -11,7 +11,8 @@ class AdminController extends BaseController
     public function beforeAction($action){if(!parent::beforeAction($action))return false;$this->admin();return true;}
     public function actionUsers(?int $id=null)
     {
-        $edit=$id?User::findOne($id):null;if($id && !$edit)throw new \yii\web\NotFoundHttpException();
+        $edit=$id?User::findOne(['id'=>$id,'deleted_at'=>null]):null;if($id && !$edit)throw new \yii\web\NotFoundHttpException();
+        if(Yii::$app->request->isPost && !$edit)\app\services\Management::authorize($this->actor());
         if(Yii::$app->request->isPost){try{
             $data=Yii::$app->request->post();$user=$edit?:new User();$super=$this->actor()->role==='superadmin';
             $previousRole=$edit?->role??'unassigned';
@@ -35,18 +36,36 @@ class AdminController extends BaseController
             if(!$edit)$user->created_at=time();if($password!==''){$user->setPassword($password);$user->must_change_password=1;}
             $user->save(false);Catalog::audit((int)$this->actor()->id,'user_save',json_encode(['user_id'=>$user->id,'role_before'=>$previousRole,'role_after'=>$role,'org_id'=>$user->org_id],JSON_THROW_ON_ERROR));Yii::$app->session->setFlash('success','Foydalanuvchi saqlandi.');return $this->redirect(['users']);
         }catch(\Throwable $e){$this->message($e);}}
-        return $this->render('users',['edit'=>$edit,'rows'=>User::find()->orderBy('name')->all(),'orgs'=>(new Query())->from('org')->orderBy('name')->all()]);
+        return $this->render('users',['edit'=>$edit,'rows'=>User::find()->where(['deleted_at'=>null])->orderBy('name')->all(),'orgs'=>(new Query())->from('org')->orderBy('name')->all()]);
     }
     public function actionStructure(?int $id=null)
     {
         $edit=$id?(new Query())->from('org')->where(['id'=>$id])->one():null;
         if($id && !$edit)throw new \yii\web\NotFoundHttpException();
+        if(Yii::$app->request->isPost && !$edit)\app\services\Management::authorize($this->actor());
         if(Yii::$app->request->isPost){try{
             $name=trim((string)Yii::$app->request->post('name'));$kind=(string)Yii::$app->request->post('kind');$parent=(int)Yii::$app->request->post('parent_id');
             \app\services\Organization::save($name,$kind,$parent?:null,$id);
             Catalog::audit((int)$this->actor()->id,'org_save',$name);Yii::$app->session->setFlash('success','Tuzilma saqlandi.');return $this->redirect(['structure']);
         }catch(\Throwable $e){$this->message($e);}}
         return $this->render('structure',['edit'=>$edit,'rows'=>(new Query())->from('org')->orderBy(['kind'=>SORT_DESC,'name'=>SORT_ASC])->all()]);
+    }
+    public function actionDeleteStructure(int $id)
+    {
+        $this->postOnly();\app\services\Management::authorize($this->actor());
+        try{\app\services\Management::deleteOrganization($this->actor(),$id);Yii::$app->session->setFlash('success','Bo‘lim o‘chirildi.');}catch(\Throwable $e){$this->message($e);}return $this->redirect(['structure']);
+    }
+    public function actionDeleteUser(int $id)
+    {
+        $this->postOnly();\app\services\Management::authorize($this->actor());
+        try{\app\services\Management::deleteUser($this->actor(),$id);Yii::$app->session->setFlash('success','Xodim o‘chirildi. Oldingi hujjat va qarorlar tarixi saqlandi.');}catch(\Throwable $e){$this->message($e);}return $this->redirect(['users']);
+    }
+    public function actionIndicators(?int $id=null)
+    {
+        \app\services\Management::authorize($this->actor());$edit=$id?(new Query())->from('indicator')->where(['id'=>$id,'deleted_at'=>null])->one():null;
+        if($id && !$edit)throw new \yii\web\NotFoundHttpException();
+        if(Yii::$app->request->isPost){try{if(Yii::$app->request->post('operation')==='delete'){if(!$id)throw new DomainException('Mezon tanlanmagan.');\app\services\Management::deleteIndicator($this->actor(),$id);}else \app\services\Management::saveIndicator($this->actor(),Yii::$app->request->post(),$id);Yii::$app->session->setFlash('success','Mezonlar katalogi yangilandi. Davr ballari alohida hisoblash qoidalarida boshqariladi.');return $this->redirect(['indicators']);}catch(\Throwable $e){$this->message($e);}}
+        return $this->render('indicators',['edit'=>$edit,'rows'=>(new Query())->from('indicator')->where(['deleted_at'=>null])->orderBy(['category'=>SORT_ASC,'id'=>SORT_ASC])->all()]);
     }
     public function actionPeriods(?int $id=null)
     {
@@ -66,10 +85,11 @@ class AdminController extends BaseController
     }
     public function actionRules()
     {
+        if(Yii::$app->request->isPost)\app\services\Management::authorize($this->actor());
         $periodId=(int)Yii::$app->request->get('period',0);$category=(string)Yii::$app->request->get('category','DSC');$editId=(int)Yii::$app->request->get('id',0);
         if(Yii::$app->request->isPost){$this->postOnly();try{
             $rule=(new Query())->from('period_rule')->where(['id'=>$editId,'period_id'=>$periodId])->one();if(!$rule)throw new DomainException('Qoida topilmadi.');
-            $indicator=(new Query())->from('indicator')->where(['id'=>$rule['indicator_id']])->one();$period=(new Query())->from('period')->where(['id'=>$periodId])->one();if($period['closed'])throw new DomainException('Yopiq davr qoidasi o‘zgartirilmaydi.');
+            $indicator=(new Query())->from('indicator')->where(['id'=>$rule['indicator_id'],'deleted_at'=>null])->one();if(!$indicator)throw new DomainException('Mezon o‘chirilgan.');$period=(new Query())->from('period')->where(['id'=>$periodId])->one();if($period['closed'])throw new DomainException('Yopiq davr qoidasi o‘zgartirilmaydi.');
             $decision=trim((string)Yii::$app->request->post('decision'));if(mb_strlen($decision)<10 || mb_strlen($decision)>3000)throw new DomainException('Qaror asosi 10–3000 belgi bo‘lsin (buyruq yoki tasdiqlangan izoh).');
             $type=(string)Yii::$app->request->post('calc_type');if(!in_array($type,['QatiyBall','BirlikUchun','ChegaraliYigindi','Ballgacha','DarajaShkalasi','PulFormulasi','XirshIndeksi'],true))throw new DomainException('Qo‘llab-quvvatlanadigan hisoblash turini tanlang.');
             if(in_array($indicator['calc_type'],['PulFormulasi','XirshIndeksi'],true) && $type!==$indicator['calc_type'])throw new DomainException('Formula turini almashtirib bo‘lmaydi.');
@@ -86,9 +106,9 @@ class AdminController extends BaseController
             Yii::$app->db->transaction(function()use($periodId,$editId,$values,$indicator,$decision){Workflow::lockPeriod($periodId);Yii::$app->db->createCommand()->update('period_rule',$values,['id'=>$editId])->execute();Catalog::audit((int)$this->actor()->id,'rule_update',$indicator['code'].' '.$decision.' '.json_encode($values,JSON_UNESCAPED_UNICODE));});
             Yii::$app->session->setFlash('success','Qoida saqlandi. Avval yuborilgan arizalar o‘z qoida nusxasini saqlaydi.');return $this->redirect(['rules','period'=>$periodId,'category'=>$category]);
         }catch(\Throwable $e){$this->message($e);}}
-        $q=(new Query())->select(['r.*','code'=>'i.code','name'=>'i.name','source_note'=>'i.source_note','source_text'=>'i.source_text','original_type'=>'i.calc_type'])->from(['r'=>'period_rule'])->innerJoin(['i'=>'indicator'],'i.id=r.indicator_id')->where(['r.period_id'=>$periodId,'i.category'=>$category]);
+        $q=(new Query())->select(['r.*','code'=>'i.code','name'=>'i.name','source_note'=>'i.source_note','source_text'=>'i.source_text','original_type'=>'i.calc_type'])->from(['r'=>'period_rule'])->innerJoin(['i'=>'indicator'],'i.id=r.indicator_id')->where(['r.period_id'=>$periodId,'i.category'=>$category,'i.deleted_at'=>null]);
         $search=mb_substr(trim((string)Yii::$app->request->get('q','')),0,150);if($search!=='')$q->andWhere(['or',['like','i.name',$search],['like','i.code',$search]]);
-        return $this->render('rules',['rows'=>$q->orderBy('i.id')->all(),'edit'=>$editId?(new Query())->select(['r.*','name'=>'i.name','source_note'=>'i.source_note','source_text'=>'i.source_text','original_type'=>'i.calc_type'])->from(['r'=>'period_rule'])->innerJoin(['i'=>'indicator'],'i.id=r.indicator_id')->where(['r.id'=>$editId,'r.period_id'=>$periodId])->one():null,'periodId'=>$periodId,'category'=>$category,'periods'=>(new Query())->from('period')->orderBy(['starts'=>SORT_DESC])->all()]);
+        return $this->render('rules',['rows'=>$q->orderBy('i.id')->all(),'edit'=>$editId?(new Query())->select(['r.*','name'=>'i.name','source_note'=>'i.source_note','source_text'=>'i.source_text','original_type'=>'i.calc_type'])->from(['r'=>'period_rule'])->innerJoin(['i'=>'indicator'],'i.id=r.indicator_id')->where(['r.id'=>$editId,'r.period_id'=>$periodId,'i.deleted_at'=>null])->one():null,'periodId'=>$periodId,'category'=>$category,'periods'=>(new Query())->from('period')->orderBy(['starts'=>SORT_DESC])->all()]);
     }
     public function actionRoute()
     {
@@ -103,17 +123,21 @@ class AdminController extends BaseController
     }
     public function actionHemis()
     {
+        if(Yii::$app->request->isPost && in_array(Yii::$app->request->post('operation'),['structure','employees'],true))\app\services\Management::authorize($this->actor());
         if(Yii::$app->request->isPost){try{
             $op=(string)Yii::$app->request->post('operation');
+            if(in_array($op,['structure','employees'],true) && function_exists('set_time_limit'))@set_time_limit(180);
             if($op==='configure'){\app\services\Hemis::configure((string)Yii::$app->request->post('host'),(string)Yii::$app->request->post('token'));$message='HEMIS sozlamalari saqlandi.';}
             elseif($op==='test'){ $items=\app\services\Hemis::fetch('structure');$message='HEMIS ulanishi ishladi. Tuzilma yozuvlari: '.count($items); }
             elseif(in_array($op,['structure','employees'],true)){
                 $items=\app\services\Hemis::fetch($op);$result=$op==='structure'?\app\services\Hemis::applyStructure($items,(int)Yii::$app->request->post('university_id')?:null):\app\services\Hemis::applyEmployees($items);
+                if($op==='employees'){$result['finished_at']=date('Y-m-d H:i:s');file_put_contents(Yii::getAlias('@runtime/hemis-import-last.json'),json_encode($result,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),LOCK_EX);}
                 $message='Import: '.$result['saved'].' saqlandi, '.$result['skipped'].' o‘tkazildi.'.(!empty($result['unlinked'])?' Bolimga biriktirilmagan: '.$result['unlinked'].'. Avval tuzilmani import qiling, keyin xodimlarni qayta yuklang.':'');
             }else throw new DomainException('Amal noma’lum.');
-            Catalog::audit((int)$this->actor()->id,'hemis_'.$op,$message);Yii::$app->session->setFlash('success',$message);return $this->refresh();
+            if($op==='employees' && !empty($result['reasons'])){foreach($result['reasons'] as $reason=>$count)$message.=' '.$reason.': '.$count.'.';}
+            Catalog::audit((int)$this->actor()->id,'hemis_'.$op,$message);Yii::$app->session->setFlash($op==='employees' && empty($result['saved'])?'warning':'success',$message);return $this->refresh();
         }catch(\Throwable $e){$this->message($e);}}
-        return $this->render('hemis',['settings'=>\app\services\Hemis::settings(),'universities'=>(new Query())->from('org')->where(['kind'=>'university'])->all()]);
+        return $this->render('hemis',['settings'=>\app\services\Hemis::settings(),'universities'=>(new Query())->from('org')->where(['kind'=>'university'])->all(),'lastImport'=>is_file(Yii::getAlias('@runtime/hemis-import-last.json'))?json_decode(file_get_contents(Yii::getAlias('@runtime/hemis-import-last.json')),true):null]);
     }
     public function actionAudit(){return $this->render('audit',['rows'=>(new Query())->select(['a.*','actor'=>'u.name'])->from(['a'=>'audit'])->leftJoin(['u'=>'user'],'u.id=a.actor_id')->orderBy(['a.id'=>SORT_DESC])->limit(300)->all()]);}
 }

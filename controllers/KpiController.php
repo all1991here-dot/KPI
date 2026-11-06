@@ -49,7 +49,7 @@ class KpiController extends BaseController
             $row=array_merge($row,Yii::$app->request->post());
             try{$saved=Workflow::save($this->actor(),Yii::$app->request->post(),\yii\web\UploadedFile::getInstancesByName('evidence'),$id);Yii::$app->session->setFlash('success',$id && $this->actor()->isAdmin()?'Hujjat tahrirlandi. Egasi qayta tekshiruvga yuborishi kerak.':'Qoralama saqlandi. Dalillarni tekshirib, yuborish tugmasini bosing.');return $this->redirect(['view','id'=>$saved]);}catch(\Throwable $e){$this->message($e);}
         }
-        return $this->render('create',['row'=>$row,'id'=>$id,'periods'=>(new Query())->from('period')->where($id && $this->actor()->isAdmin()?['or',['closed'=>0],['id'=>$row['period_id']]]:['closed'=>0])->orderBy(['starts'=>SORT_DESC])->all(),'indicators'=>(new Query())->from('indicator')->where(['category'=>$category])->orderBy('id')->all()]);
+        return $this->render('create',['row'=>$row,'id'=>$id,'periods'=>(new Query())->from('period')->where($id && $this->actor()->isAdmin()?['or',['closed'=>0],['id'=>$row['period_id']]]:['closed'=>0])->orderBy(['starts'=>SORT_DESC])->all(),'indicators'=>(new Query())->from('indicator')->where(['category'=>$category])->andWhere($id?['or',['deleted_at'=>null],['id'=>$row['indicator_id']]]:['deleted_at'=>null])->orderBy('id')->all()]);
     }
     public function actionView(int $id)
     {
@@ -74,7 +74,7 @@ class KpiController extends BaseController
     public function actionCriteria()
     {
         $category=(string)Yii::$app->request->get('category',$this->actor()->category?:'DSC');$period=(int)Yii::$app->request->get('period',0);
-        $q=(new Query())->from(['i'=>'indicator'])->where(['i.category'=>$category]);
+        $q=(new Query())->from(['i'=>'indicator'])->where(['i.category'=>$category,'i.deleted_at'=>null]);
         $q->select(['i.*']);if($period)$q->addSelect(['enabled'=>'r.enabled','decision'=>'r.decision','configured_score'=>'r.base_score'])->leftJoin(['r'=>'period_rule'],'r.indicator_id=i.id AND r.period_id=:p',[':p'=>$period]);
         return $this->render('criteria',['rows'=>$q->orderBy('i.id')->all(),'category'=>$category,'periodId'=>$period,'periods'=>(new Query())->from('period')->orderBy(['starts'=>SORT_DESC])->all()]);
     }

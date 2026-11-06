@@ -4,7 +4,7 @@ Yii::setAlias('@app',dirname(__DIR__));
 $dir=dirname(__DIR__).'/runtime/tests-'.bin2hex(random_bytes(6));mkdir($dir,0700,true);
 $config=require dirname(__DIR__).'/config/console.php';$config['runtimePath']=$dir;$config['components']['db']=['class'=>yii\db\Connection::class,'dsn'=>'sqlite:'.$dir.'/test.sqlite'];
 new yii\console\Application($config);
-require dirname(__DIR__).'/migrations/m261105_000001_initial.php';ob_start();(new m261105_000001_initial())->up();ob_end_clean();require dirname(__DIR__).'/migrations/m261106_000001_employee_profile.php';ob_start();(new m261106_000001_employee_profile())->up();ob_end_clean();Yii::$app->db->schema->refresh();
+require dirname(__DIR__).'/migrations/m261105_000001_initial.php';ob_start();(new m261105_000001_initial())->up();ob_end_clean();require dirname(__DIR__).'/migrations/m261106_000001_employee_profile.php';ob_start();(new m261106_000001_employee_profile())->up();ob_end_clean();require dirname(__DIR__).'/migrations/m261106_000002_superadmin_management.php';ob_start();(new m261106_000002_superadmin_management())->up();ob_end_clean();Yii::$app->db->schema->refresh();
 use app\services\{Catalog,Workflow,ScoreCalculator,Access,Hemis};use app\models\User;use yii\db\Query;
 $count=0;
 function check(bool $condition,string $name):void{global $count;if(!$condition)throw new RuntimeException('FAIL '.$name);$count++;echo "PASS $name\n";}
@@ -18,7 +18,7 @@ function fixture(User $u,int $period,int $indicator,string $name='Faoliyat',int 
 function rule(string $code):array{return(new Query())->from('indicator')->where(['code'=>$code])->one();}
 function approve(User $head,User $expert,User $admin,int $id):void{Workflow::act($head,$id,'approve','Kafedra tasdiqladi');Workflow::act($expert,$id,'approve','Ekspert tasdiqladi');Workflow::act($admin,$id,'approve','Yakuniy tasdiq');}
 try{
- Hemis::configure('https://student.fdu.uz/',' TestOnly-Hemis-Key ');
+ Hemis::configure('https://student.fdu.uz/',' Bearer TestOnly-Hemis-Key ');
  $stored=Hemis::settings();check(!str_contains(file_get_contents(Yii::getAlias('@runtime/hemis.json')),'TestOnly-Hemis-Key'),'HEMIS token encrypted on disk');
  check(Yii::$app->security->decryptByKey(base64_decode($stored['token']),Yii::$app->params['cookieKey'])==='TestOnly-Hemis-Key','HEMIS token survives reload');
  Hemis::configure('student.fdu.uz','');check(Hemis::settings()===$stored,'blank HEMIS token preserves saved key');
@@ -83,7 +83,7 @@ try{
  denied(fn()=>\app\services\AccountPolicy::role($ordinaryAdmin,$teacher,'expert'),'admin cannot grant ordinary role');
  denied(fn()=>\app\services\AccountPolicy::role($ordinaryAdmin,$teacher,'unassigned'),'admin cannot remove role');
  check(\app\services\AccountPolicy::role($ordinaryAdmin,$teacher,null)==='teacher','admin can retain existing role');
- check(\app\services\AccountPolicy::role($ordinaryAdmin,null,null)==='unassigned','new admin-created account has no role');
+ denied(fn()=>\app\services\AccountPolicy::role($ordinaryAdmin,null,null),'only superadmin can add an employee');
  check(\app\services\AccountPolicy::role($admin,$teacher,'expert')==='expert','superadmin can assign role');
  check(\app\services\AccountPolicy::role($admin,$teacher,'unassigned')==='unassigned','superadmin can remove role');
  denied(fn()=>\app\services\Organization::save('Bad faculty','faculty',$department),'faculty cannot attach to department');
@@ -118,5 +118,21 @@ try{
  Hemis::applyStructure([['id'=>901,'name'=>'Matched Faculty','structureType'=>['code'=>'12']],['id'=>902,'name'=>'Matched Department','structureType'=>['code'=>'13'],'parent'=>['id'=>901]]],$root);
  check((int)(new Query())->from('org')->where(['hemis_id'=>'901'])->scalar()===$manualFaculty,'HEMIS reuses matching manual faculty');
  check((int)(new Query())->from('org')->where(['hemis_id'=>'902'])->scalar()===$manualDepartment,'HEMIS reuses matching manual department');
+
+ try{\app\services\Management::deleteOrganization($ordinaryAdmin,$root);throw new RuntimeException('Expected superadmin restriction');}catch(\yii\web\ForbiddenHttpException $e){check(true,'admin cannot delete organization');}
+ denied(fn()=>\app\services\Management::deleteOrganization($admin,$root),'cannot delete university containing faculties');
+ $emptyOrg=\app\services\Organization::save('Delete fixture','university',null);\app\services\Management::deleteOrganization($admin,$emptyOrg);check(!(new Query())->from('org')->where(['id'=>$emptyOrg])->exists(),'superadmin deletes empty organization');
+ $deleted=user('deleted_employee','teacher',$dep);$deleted->hemis_id='777';$deleted->save(false);\app\services\Management::deleteUser($admin,(int)$deleted->id);check(User::findIdentity($deleted->id)===null,'deleted employee cannot authenticate');
+ $report=Hemis::applyEmployees([['id'=>777,'full_name'=>'Do not restore']]);check($report['saved']===0 && $report['skipped']===1,'HEMIS does not recreate deleted employee');
+ $criterion=['code'=>'CUSTOM-DELETE-TEST','name'=>'Custom test criterion','section'=>'CUSTOM','section_name'=>'Custom direction','criterion_code'=>'CUSTOM-1','criterion_name'=>'Custom condition','category'=>'PHD','calc_type'=>'BirlikUchun','base_score'=>'2','policy_required'=>1];
+ $custom=\app\services\Management::saveIndicator($admin,$criterion);check((new Query())->from('indicator')->where(['id'=>$custom])->exists(),'superadmin creates criterion');
+ \app\services\Management::saveIndicator($admin,array_merge($criterion,['name'=>'Edited test criterion']),$custom);check((new Query())->from('indicator')->where(['id'=>$custom])->one()['name']==='Edited test criterion','superadmin edits criterion');
+ \app\services\Management::deleteIndicator($admin,$custom);check((new Query())->from('indicator')->where(['id'=>$custom])->one()['deleted_at']!==null,'superadmin deletes criterion without breaking history');
+ $catalogCount=(int)(new Query())->from('indicator')->count();Catalog::import();check((int)(new Query())->from('indicator')->count()===$catalogCount,'startup does not resurrect deleted criteria');
+ $badReport=Hemis::applyEmployees([null,['id'=>[],'name'=>[]],['id'=>999,'first_name'=>'Only','last_name'=>'Names']]);check($badReport['saved']===1 && $badReport['skipped']===2 && !empty($badReport['reasons']),'malformed employee rows reported without aborting whole import');
+
+ $historyCount=(int)(new Query())->from('application')->where(['employee_id'=>$teacher->id])->count();
+ \app\services\Management::deleteUser($admin,(int)$teacher->id);check((int)(new Query())->from('application')->where(['employee_id'=>$teacher->id])->count()===$historyCount && User::findOne($teacher->id)!==null,'employee deletion preserves linked documents');
+ \app\services\Management::deleteIndicator($admin,(int)$patent['id']);Catalog::import();check((new Query())->from('indicator')->where(['id'=>$patent['id']])->one()['deleted_at']!==null && Workflow::application($id)['indicator_id']==$patent['id'],'source criterion deletion survives reimport and preserves linked documents');
  echo "\nSUCCESS: $count checks completed.\n";
 }catch(Throwable $e){fwrite(STDERR,$e."\n");exit(1);}

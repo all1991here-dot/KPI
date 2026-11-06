@@ -30,7 +30,7 @@ class Catalog
     }
     public static function createRules(int $periodId): void
     {
-        foreach ((new Query())->from('indicator')->all() as $row) {
+        foreach ((new Query())->from('indicator')->where(['deleted_at'=>null])->all() as $row) {
             if ((new Query())->from('period_rule')->where(['period_id'=>$periodId,'indicator_id'=>$row['id']])->exists()) continue;
             $values=array_intersect_key($row,array_flip(['calc_type','base_score','upper_score','cap_score','once_only']));
             Yii::$app->db->createCommand()->insert('period_rule',$values+['period_id'=>$periodId,'indicator_id'=>$row['id'],'enabled'=>$row['policy_required']?0:1,'decision'=>$row['policy_required']?'':'Manba hujjatidagi aniq qoida','revision'=>1])->execute();

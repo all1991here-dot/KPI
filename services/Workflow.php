@@ -24,6 +24,7 @@ class Workflow
         $period=(new Query())->from('period')->where(['id'=>(int)($data['period_id']??0)])->one();
         $indicator=(new Query())->from('indicator')->where(['id'=>(int)($data['indicator_id']??0),'category'=>$category])->one();
         if (!$period || ($period['closed'] && !($old && $actor->isAdmin()))) throw new DomainException('Ochiq baholash davrini tanlang.');
+        if($indicator && !empty($indicator['deleted_at']) && (!$old || (int)$old['indicator_id']!==(int)$indicator['id']))throw new DomainException('O‘chirilgan mezon bo‘yicha yangi faoliyat yaratilmaydi.');
         if (!$indicator) throw new DomainException('Profilingiz toifasiga mos ko‘rsatkichni tanlang.');
         $title=trim((string)($data['title']??''));$date=(string)($data['activity_date']??'');$quantity=filter_var($data['quantity']??null,FILTER_VALIDATE_INT);
         if ($title==='' || mb_strlen($title)>250) throw new DomainException('Faoliyat nomi 1–250 belgidan iborat bo‘lsin.');
@@ -84,6 +85,7 @@ class Workflow
                 $allowed=$action==='appeal'?['returned','rejected']:['draft','returned'];
                 if(!in_array($app['status'],$allowed,true))throw new DomainException('Bu holatda ariza yuborilmaydi.');
                 if($action==='appeal' && $reason==='')throw new DomainException('Apellyatsiya sababini kiriting.');
+                if((new Query())->from('indicator')->where(['id'=>$app['indicator_id']])->andWhere(['not',['deleted_at'=>null]])->exists())throw new DomainException('Bu mezon o‘chirilgan. Amaldagi mezonni tanlang.');
                 $employee=User::findOne($app['employee_id']);
                 if(!$employee || !$employee->active || $employee->category!==$app['category'])throw new DomainException('Xodim toifasi o‘zgargan. Arizani yangilang.');
                 $rule=(new Query())->from('period_rule')->where(['period_id'=>$app['period_id'],'indicator_id'=>$app['indicator_id']])->one();

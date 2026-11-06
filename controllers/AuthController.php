@@ -22,7 +22,7 @@ class AuthController extends BaseController
             $ipFingerprint=hash('sha256','ip|'.Yii::$app->request->userIP);
             $fail=(new Query())->from('login_attempt')->where(['fingerprint'=>$fingerprint])->andWhere(['>','created_at',time()-900])->count();
             $ipFail=(new Query())->from('login_attempt')->where(['fingerprint'=>$ipFingerprint])->andWhere(['>','created_at',time()-900])->count();
-            $user=User::findOne(['username'=>$username,'active'=>1]);
+            $user=User::findOne(['username'=>$username,'active'=>1,'deleted_at'=>null]);
             if($fail>=8 || $ipFail>=50)$error='Urinishlar ko‘p. 15 daqiqadan so‘ng qayta urinib ko‘ring.';
             elseif($user && Yii::$app->security->validatePassword($password,$user->password_hash)){
                 Yii::$app->db->createCommand()->delete('login_attempt',['fingerprint'=>$fingerprint])->execute();

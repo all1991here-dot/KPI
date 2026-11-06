@@ -7,7 +7,7 @@ class User extends ActiveRecord implements IdentityInterface
 {
     public const ROLES = ['unassigned'=>'Rol biriktirilmagan', 'teacher' => 'O‘qituvchi', 'head' => 'Kafedra mudiri', 'faculty' => 'Fakultet mas’uli', 'expert' => 'Ekspert', 'admin' => 'KPI administratori', 'superadmin' => 'Superadministrator', 'management' => 'Rahbariyat'];
     public static function tableName() { return '{{%user}}'; }
-    public static function findIdentity($id) { return static::findOne(['id' => $id, 'active' => 1]); }
+    public static function findIdentity($id) { return static::findOne(['id' => $id, 'active' => 1, 'deleted_at'=>null]); }
     public static function findIdentityByAccessToken($token, $type = null) { return null; }
     public function getId() { return $this->id; }
     public function getAuthKey() { return $this->auth_key; }
