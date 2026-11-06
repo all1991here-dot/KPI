@@ -24,6 +24,7 @@ class AdminController extends BaseController
             $active=isset($data['active'])?1:0;
             if($edit && (int)$edit->id===(int)$this->actor()->id && (!$active || $role!==$edit->role))throw new DomainException('O‘z hisobingizni o‘chira yoki rolini o‘zgartira olmaysiz.');
             $orgId=(int)($data['org_id']??0);$org=$orgId?(new Query())->from('org')->where(['id'=>$orgId])->one():null;
+            if($orgId && (!$edit || (int)$edit->org_id!==$orgId) && \app\services\Organization::blockedBy($orgId))throw new DomainException('Bloklangan bo‘limga yangi xodim biriktirilmaydi.');
             if($orgId && !$org)throw new DomainException('Bo‘lim topilmadi.');
             if(($role==='head' && (!$org || $org['kind']!=='department')) || ($role==='faculty' && (!$org || $org['kind']!=='faculty')))throw new DomainException('Kafedra mudiriga kafedra, fakultet mas’uliga fakultet tanlang.');
             if(User::find()->where(['username'=>$username])->andFilterWhere($id?['<>','id',$id]:[])->exists())throw new DomainException('Bu login band.');
@@ -40,15 +41,25 @@ class AdminController extends BaseController
     }
     public function actionStructure(?int $id=null)
     {
+        if($id){if(Yii::$app->request->isPost)return $this->actionStructureEdit($id);return $this->redirect(['structure-edit','id'=>$id]);}
+        if(Yii::$app->request->isPost)return $this->actionStructureEdit();
+        return $this->render('structure',['rows'=>(new Query())->from('org')->orderBy('name')->all()]);
+    }
+    public function actionStructureEdit(?int $id=null,string $kind='university')
+    {
         $edit=$id?(new Query())->from('org')->where(['id'=>$id])->one():null;
         if($id && !$edit)throw new \yii\web\NotFoundHttpException();
-        if(Yii::$app->request->isPost && !$edit)\app\services\Management::authorize($this->actor());
+        if(!$edit)\app\services\Management::authorize($this->actor());
+        $kind=$edit['kind']??(string)Yii::$app->request->post('kind',$kind);if(!in_array($kind,['university','faculty','department'],true))throw new \yii\web\BadRequestHttpException('Tuzilma turi noto‘g‘ri.');
         if(Yii::$app->request->isPost){try{
-            $name=trim((string)Yii::$app->request->post('name'));$kind=(string)Yii::$app->request->post('kind');$parent=(int)Yii::$app->request->post('parent_id');
-            \app\services\Organization::save($name,$kind,$parent?:null,$id);
-            Catalog::audit((int)$this->actor()->id,'org_save',$name);Yii::$app->session->setFlash('success','Tuzilma saqlandi.');return $this->redirect(['structure']);
-        }catch(\Throwable $e){$this->message($e);}}
-        return $this->render('structure',['edit'=>$edit,'rows'=>(new Query())->from('org')->orderBy(['kind'=>SORT_DESC,'name'=>SORT_ASC])->all()]);
+            $operation=(string)Yii::$app->request->post('operation','save');
+            if($operation==='delete'){if(!$id)throw new DomainException('Avval bo‘lim yarating.');\app\services\Management::deleteOrganization($this->actor(),$id);Yii::$app->session->setFlash('success','Bo‘lim o‘chirildi.');return $this->redirect(['structure']);}
+            if(in_array($operation,['block','unblock'],true)){if(!$id)throw new DomainException('Avval bo‘lim yarating.');\app\services\Organization::setBlocked($this->actor(),$id,$operation==='block');Yii::$app->session->setFlash('success',$operation==='block'?'Bo‘lim bloklandi.':'Bo‘lim blokdan chiqarildi.');return $this->redirect(['structure-edit','id'=>$id]);}
+            if($operation!=='save')throw new DomainException('Amal noto‘g‘ri.');
+            $saved=\app\services\Organization::saveDetails($this->actor(),Yii::$app->request->post(),$id,$kind);
+            Yii::$app->session->setFlash('success','Barcha rekvizitlar saqlandi.');return $this->redirect(['structure-edit','id'=>$saved]);
+        }catch(\Throwable $e){if($e instanceof \yii\web\ForbiddenHttpException)throw $e;$this->message($e);}}
+        return $this->render('structure-edit',['edit'=>$edit,'kind'=>$kind,'rows'=>(new Query())->from('org')->orderBy('name')->all()]);
     }
     public function actionDeleteStructure(int $id)
     {
@@ -134,7 +145,7 @@ class AdminController extends BaseController
                 if($op==='employees'){$result['finished_at']=date('Y-m-d H:i:s');file_put_contents(Yii::getAlias('@runtime/hemis-import-last.json'),json_encode($result,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),LOCK_EX);}
                 $message='Import: '.$result['saved'].' saqlandi, '.$result['skipped'].' o‘tkazildi.'.(!empty($result['unlinked'])?' Bolimga biriktirilmagan: '.$result['unlinked'].'. Avval tuzilmani import qiling, keyin xodimlarni qayta yuklang.':'');
             }else throw new DomainException('Amal noma’lum.');
-            if($op==='employees' && !empty($result['reasons'])){foreach($result['reasons'] as $reason=>$count)$message.=' '.$reason.': '.$count.'.';}
+            if(in_array($op,['structure','employees'],true) && !empty($result['reasons'])){foreach($result['reasons'] as $reason=>$count)$message.=' '.$reason.': '.$count.'.';}
             Catalog::audit((int)$this->actor()->id,'hemis_'.$op,$message);Yii::$app->session->setFlash($op==='employees' && empty($result['saved'])?'warning':'success',$message);return $this->refresh();
         }catch(\Throwable $e){$this->message($e);}}
         return $this->render('hemis',['settings'=>\app\services\Hemis::settings(),'universities'=>(new Query())->from('org')->where(['kind'=>'university'])->all(),'lastImport'=>is_file(Yii::getAlias('@runtime/hemis-import-last.json'))?json_decode(file_get_contents(Yii::getAlias('@runtime/hemis-import-last.json')),true):null]);

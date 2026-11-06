@@ -55,6 +55,7 @@ class Hemis
             $roots=(new Query())->from('org')->where(['kind'=>'university'])->all();
             $university=$universityId?(new Query())->from('org')->where(['id'=>$universityId,'kind'=>'university'])->one():(count($roots)===1?$roots[0]:null);
             if(!$university || trim($university['name'])==='Universitet')throw new DomainException('Avval universitet nomini qolda toldiring va import uchun universitetni tanlang.');
+            if(Organization::blockedBy((int)$university['id']))throw new DomainException('Universitet bloklangan. Avval blokdan chiqaring.');
             $map=[];$result=['saved'=>0,'skipped'=>0];
             foreach($items as $item){$id=self::id($item['id']??null);if($id)$map[$id]=$item;}
             foreach(['12'=>'faculty','13'=>'department'] as $code=>$kind){
@@ -72,6 +73,7 @@ class Hemis
                     }
                     $old=(new Query())->from('org')->where(['hemis_id'=>(string)$id])->one();
                     if(!$old){$manual=(new Query())->from('org')->where(['name'=>$name,'kind'=>$kind,'parent_id'=>$parent,'hemis_id'=>null])->all();if(count($manual)>1){$result['skipped']++;continue;}if(count($manual)===1)$old=$manual[0];}
+                    if(Organization::blockedBy((int)$parent) && (!$old || (int)$old['parent_id']!==(int)$parent)){$result['skipped']++;$result['reasons']['Yuqori bo‘lim bloklangan']=($result['reasons']['Yuqori bo‘lim bloklangan']??0)+1;continue;}
                     if($old && $old['kind']!==$kind){$result['skipped']++;continue;}
                     $values=['hemis_id'=>(string)$id,'name'=>mb_substr($name,0,200),'kind'=>$kind,'parent_id'=>$parent];$command=Yii::$app->db->createCommand();
                     if($old)$command->update('org',$values,['id'=>$old['id']])->execute();else $command->insert('org',$values)->execute();$result['saved']++;
@@ -93,6 +95,7 @@ class Hemis
                 if(!$id || $name===''){$result['skipped']++;$reason=!$id?'HEMIS ID yo‘q':'F.I.Sh. yo‘q';$result['reasons'][$reason]=($result['reasons'][$reason]??0)+1;continue;}
                 $department=self::id($item['department']??$item['_department']??$item['department_id']??null);$org=$department?(new Query())->from('org')->where(['hemis_id'=>$department])->one():null;
                 $user=User::findOne(['hemis_id'=>$id]);$new=!$user;
+                if($org && Organization::blockedBy((int)$org['id']) && (!$user || (int)$user->org_id!==(int)$org['id'])){$org=null;$result['reasons']['Bo‘lim bloklangan']=($result['reasons']['Bo‘lim bloklangan']??0)+1;}
                 if($user && $user->deleted_at){$result['skipped']++;$result['reasons']['Superadministrator o‘chirgan hisob']=($result['reasons']['Superadministrator o‘chirgan hisob']??0)+1;continue;}
                 if($new){$user=new User();$user->username='hemis_'.$id;if(User::findOne(['username'=>$user->username])){$result['skipped']++;$result['reasons']['Login band, HEMIS ID bilan bog‘lang']=($result['reasons']['Login band, HEMIS ID bilan bog‘lang']??0)+1;continue;}$user->role='unassigned';$user->active=0;$user->must_change_password=1;$user->created_at=time();
                     // All imported accounts are inactive. Generate one unknown password hash per batch,

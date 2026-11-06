@@ -13,7 +13,7 @@ class HemisHttp
 require dirname(__DIR__).'/vendor/autoload.php';require dirname(__DIR__).'/vendor/yiisoft/yii2/Yii.php';
 \Yii::setAlias('@app',dirname(__DIR__));$dir=dirname(__DIR__).'/runtime/hemis-import-test-'.bin2hex(random_bytes(4));mkdir($dir,0700,true);
 $config=require dirname(__DIR__).'/config/console.php';$config['runtimePath']=$dir;$config['components']['db']=['class'=>\yii\db\Connection::class,'dsn'=>'sqlite:'.$dir.'/test.sqlite'];new \yii\console\Application($config);
-foreach(['m261105_000001_initial','m261106_000001_employee_profile','m261106_000002_superadmin_management'] as $migration){require dirname(__DIR__).'/migrations/'.$migration.'.php';ob_start();(new $migration())->up();ob_end_clean();}\Yii::$app->db->schema->refresh();
+foreach(['m261105_000001_initial','m261106_000001_employee_profile','m261106_000002_superadmin_management','m261106_000003_organization_details'] as $migration){require dirname(__DIR__).'/migrations/'.$migration.'.php';ob_start();(new $migration())->up();ob_end_clean();}\Yii::$app->db->schema->refresh();
 $count=0;function check($condition,$name){global $count;if(!$condition)throw new \RuntimeException($name);echo 'PASS '.$name."\n";$count++;}
 function denied($fn,$part){try{$fn();throw new \RuntimeException('Expected failure');}catch(\DomainException $e){check(str_contains($e->getMessage(),$part),$part);}}
 Hemis::configure('example.test','Isolated-Test-Key');

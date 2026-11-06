@@ -19,8 +19,8 @@ with sync_playwright() as p:
     assert page.locator('tbody tr').filter(has_text='Browser edited KPI').count()==1
     page.screenshot(path=str(out/'indicators.png'),full_page=True)
     page.locator('tbody tr').filter(has_text='BROWSER-CUSTOM').get_by_role('button',name='O‘chirish').click();page.wait_for_load_state('networkidle');assert not page.locator('tbody tr').filter(has_text='BROWSER-CUSTOM').count()
-    goto('admin/structure');page.locator('[name=name]').fill('Browser delete university');page.get_by_role('button',name='Saqlash',exact=True).click();page.wait_for_load_state('networkidle')
-    page.locator('tbody tr').filter(has_text='Browser delete university').get_by_role('button',name='O‘chirish').click();page.wait_for_load_state('networkidle');assert not page.locator('tbody tr').filter(has_text='Browser delete university').count()
+    goto('admin/structure-edit&kind=university');page.locator('[name=name]').fill('Browser delete university');page.get_by_role('button',name='Saqlash',exact=True).click();page.wait_for_load_state('networkidle')
+    page.get_by_role('button',name='O‘chirish',exact=True).click();page.wait_for_load_state('networkidle');assert not page.locator('tbody tr').filter(has_text='Browser delete university').count()
     goto('admin/users')
     for key,value in {'name':'Browser delete employee','username':'browser_delete_employee','password':password}.items():page.locator(f'input[name={key}]').fill(value)
     page.get_by_role('button',name='Saqlash',exact=True).click();page.wait_for_load_state('networkidle')

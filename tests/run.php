@@ -4,7 +4,7 @@ Yii::setAlias('@app',dirname(__DIR__));
 $dir=dirname(__DIR__).'/runtime/tests-'.bin2hex(random_bytes(6));mkdir($dir,0700,true);
 $config=require dirname(__DIR__).'/config/console.php';$config['runtimePath']=$dir;$config['components']['db']=['class'=>yii\db\Connection::class,'dsn'=>'sqlite:'.$dir.'/test.sqlite'];
 new yii\console\Application($config);
-require dirname(__DIR__).'/migrations/m261105_000001_initial.php';ob_start();(new m261105_000001_initial())->up();ob_end_clean();require dirname(__DIR__).'/migrations/m261106_000001_employee_profile.php';ob_start();(new m261106_000001_employee_profile())->up();ob_end_clean();require dirname(__DIR__).'/migrations/m261106_000002_superadmin_management.php';ob_start();(new m261106_000002_superadmin_management())->up();ob_end_clean();Yii::$app->db->schema->refresh();
+require dirname(__DIR__).'/migrations/m261105_000001_initial.php';ob_start();(new m261105_000001_initial())->up();ob_end_clean();require dirname(__DIR__).'/migrations/m261106_000001_employee_profile.php';ob_start();(new m261106_000001_employee_profile())->up();ob_end_clean();require dirname(__DIR__).'/migrations/m261106_000002_superadmin_management.php';ob_start();(new m261106_000002_superadmin_management())->up();ob_end_clean();require dirname(__DIR__).'/migrations/m261106_000003_organization_details.php';ob_start();(new m261106_000003_organization_details())->up();ob_end_clean();Yii::$app->db->schema->refresh();
 use app\services\{Catalog,Workflow,ScoreCalculator,Access,Hemis};use app\models\User;use yii\db\Query;
 $count=0;
 function check(bool $condition,string $name):void{global $count;if(!$condition)throw new RuntimeException('FAIL '.$name);$count++;echo "PASS $name\n";}
@@ -134,5 +134,25 @@ try{
  $historyCount=(int)(new Query())->from('application')->where(['employee_id'=>$teacher->id])->count();
  \app\services\Management::deleteUser($admin,(int)$teacher->id);check((int)(new Query())->from('application')->where(['employee_id'=>$teacher->id])->count()===$historyCount && User::findOne($teacher->id)!==null,'employee deletion preserves linked documents');
  \app\services\Management::deleteIndicator($admin,(int)$patent['id']);Catalog::import();check((new Query())->from('indicator')->where(['id'=>$patent['id']])->one()['deleted_at']!==null && Workflow::application($id)['indicator_id']==$patent['id'],'source criterion deletion survives reimport and preserves linked documents');
+
+ $blockRoot=\app\services\Organization::save('Block University','university',null);$blockFaculty=\app\services\Organization::save('Block Faculty','faculty',$blockRoot);$blockDepartment=\app\services\Organization::save('Block Department','department',$blockFaculty);
+ $blockTeacher=user('blocked_teacher','teacher',$blockDepartment);
+ $blockPeriod=insert('period',['name'=>'Block test period','starts'=>'2026-01-01','ends'=>'2026-12-31','closed'=>0]);Catalog::createRules($blockPeriod);
+ $blockDraft=fixture($blockTeacher,$blockPeriod,(int)$cap['id'],'Before block');
+ \app\services\Organization::setBlocked($admin,$blockFaculty,true);
+ check(\app\services\Organization::blockedBy($blockDepartment)['id']==$blockFaculty,'faculty block inherited by department');
+ Yii::$app->db->createCommand()->update('org',['hemis_id'=>'6001'],['id'=>$blockFaculty])->execute();Yii::$app->db->createCommand()->update('org',['hemis_id'=>'6002'],['id'=>$blockDepartment])->execute();
+ $blockedImport=Hemis::applyEmployees([['id'=>6003,'full_name'=>'Blocked assignment fixture','department'=>['id'=>6002]]]);check(User::findOne(['hemis_id'=>'6003'])->org_id===null && !empty($blockedImport['reasons']['Bo‘lim bloklangan']),'HEMIS cannot bypass blocked employee assignment');
+ $blockedStructure=Hemis::applyStructure([['id'=>6004,'name'=>'Blocked new department','structureType'=>['code'=>'13'],'parent'=>6001]],$blockRoot);check($blockedStructure['saved']===0 && $blockedStructure['skipped']===1,'HEMIS cannot create child under blocked faculty');
+ try{\app\services\Organization::saveDetails($ordinaryAdmin,['name'=>'Move around block','parent_id'=>$fac],$blockDepartment,'department');throw new RuntimeException('Expected block protection');}catch(\yii\web\ForbiddenHttpException $e){check(true,'admin cannot escape inherited block by reparenting');}
+
+ denied(fn()=>Workflow::save($blockTeacher,['period_id'=>$blockPeriod,'indicator_id'=>$cap['id'],'title'=>'Blocked new','activity_date'=>'2026-06-01','quantity'=>1],[]),'blocked department prevents new activities');
+ denied(fn()=>Workflow::act($blockTeacher,$blockDraft,'submit'),'blocked department prevents new submission');
+ denied(fn()=>\app\services\Organization::saveDetails($admin,['name'=>'Blocked child','parent_id'=>$blockFaculty],null,'department'),'cannot create new child under blocked faculty');
+ try{\app\services\Organization::setBlocked($ordinaryAdmin,$blockFaculty,false);throw new RuntimeException('Expected denial');}catch(\yii\web\ForbiddenHttpException $e){check(true,'admin cannot bypass superadmin block');}
+ \app\services\Organization::saveDetails($ordinaryAdmin,['name'=>'Edited blocked department','parent_id'=>$blockFaculty,'phone'=>'+998000','email'=>'department@example.test'],$blockDepartment,'department');
+ check((new Query())->from('org')->where(['id'=>$blockDepartment])->one()['email']==='department@example.test','all organization requisites saved on dedicated form');
+ \app\services\Organization::setBlocked($admin,$blockFaculty,false);check(\app\services\Organization::blockedBy($blockDepartment)===null,'unblock restores department operations');
+ Workflow::act($blockTeacher,$blockDraft,'submit');check(Workflow::application($blockDraft)['status']==='submitted','submission works after unblock');
  echo "\nSUCCESS: $count checks completed.\n";
 }catch(Throwable $e){fwrite(STDERR,$e."\n");exit(1);}

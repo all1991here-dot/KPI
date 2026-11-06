@@ -20,6 +20,7 @@ class Workflow
         if ($old && !$actor->isAdmin() && ((int)$old['employee_id']!==(int)$actor->id || !in_array($old['status'],['draft','returned'],true))) throw new DomainException('Faqat o‘zingizning qoralama yoki qaytarilgan arizangizni tahrirlaysiz.');
         $employee=$old?User::findOne($old['employee_id']):$actor;
         if(!$employee)throw new DomainException('Ariza egasi topilmadi.');
+        if(!$old && Organization::blockedBy($employee->org_id?(int)$employee->org_id:null))throw new DomainException('Bo‘lim bloklangan. Yangi faoliyat yaratib bo‘lmaydi.');
         $category=$old && $actor->isAdmin()?$old['category']:$employee->category;
         $period=(new Query())->from('period')->where(['id'=>(int)($data['period_id']??0)])->one();
         $indicator=(new Query())->from('indicator')->where(['id'=>(int)($data['indicator_id']??0),'category'=>$category])->one();
@@ -87,6 +88,7 @@ class Workflow
                 if($action==='appeal' && $reason==='')throw new DomainException('Apellyatsiya sababini kiriting.');
                 if((new Query())->from('indicator')->where(['id'=>$app['indicator_id']])->andWhere(['not',['deleted_at'=>null]])->exists())throw new DomainException('Bu mezon o‘chirilgan. Amaldagi mezonni tanlang.');
                 $employee=User::findOne($app['employee_id']);
+                if($employee && Organization::blockedBy($employee->org_id?(int)$employee->org_id:null))throw new DomainException('Bo‘lim bloklangan. Faoliyatni tekshiruvga yuborib bo‘lmaydi.');
                 if(!$employee || !$employee->active || $employee->category!==$app['category'])throw new DomainException('Xodim toifasi o‘zgargan. Arizani yangilang.');
                 $rule=(new Query())->from('period_rule')->where(['period_id'=>$app['period_id'],'indicator_id'=>$app['indicator_id']])->one();
                 if(!$rule || !$rule['enabled'])throw new DomainException('Ko‘rsatkich qoidasi hali tasdiqlanmagan. Administratorga murojaat qiling.');
