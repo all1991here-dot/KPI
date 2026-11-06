@@ -17,13 +17,13 @@ class HemisPhoto
         $temp=tempnam($dir,'photo-');try{chmod($temp,0600);if(file_put_contents($temp,$data)!==strlen($data) || !rename($temp,$path))throw new DomainException('Rasm saqlanmadi.');}finally{if(is_file($temp))unlink($temp);}
         return $path;
     }
-    public static function file(User $person): string
+    public static function file(User $person,bool $retry=false): string
     {
-        $profile=json_decode($person->hemis_profile??'{}',true)?:[];$url=EmployeePhoto::url($profile['photo_url']??null);if(!$url)throw new DomainException('Rasm yo‘q.');
+        $profile=json_decode($person->hemis_profile??'{}',true)?:[];$url=EmployeePhoto::url($profile['photo_url']??null);if(!$url)throw new DomainException('HEMIS rasm manzilini bermagan. Xodimlarni qayta import qiling.');
         $path=self::path((int)$person->id,$url);
-        if(is_file($path) && filemtime($path)>time()-86400)return $path;
-        $miss=$path.'.miss';if(is_file($miss) && filemtime($miss)>time()-300){if(is_file($path))return $path;throw new DomainException('Rasm yo‘q.');}
-        try{return self::store((int)$person->id,$url,PhotoHttp::get($url));}
-        catch(\Throwable $e){if(!is_dir(dirname($path)))mkdir(dirname($path),0700,true);touch($miss);if(is_file($path))return $path;throw new DomainException('Rasm yo‘q.');}
+        if(!$retry && is_file($path) && filemtime($path)>time()-86400)return $path;
+        $miss=$path.'.miss-v2';if(!$retry && is_file($miss) && filemtime($miss)>time()-60){if(is_file($path))return $path;throw new DomainException('Rasm vaqtincha yuklanmadi. Tahrirlash oynasida «Rasmni tekshirish»ni bosing.');}
+        try{$file=self::store((int)$person->id,$url,PhotoHttp::get($url));if(is_file($miss))unlink($miss);return $file;}
+        catch(\Throwable $e){if(!is_dir(dirname($path)))mkdir(dirname($path),0700,true);touch($miss);if(!$retry && is_file($path))return $path;throw new DomainException($e instanceof DomainException?$e->getMessage():'Rasmni yuklash yoki saqlashda xato.');}
     }
 }
