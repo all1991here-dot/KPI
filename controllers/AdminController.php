@@ -14,8 +14,9 @@ class AdminController extends BaseController
         $edit=$id?User::findOne($id):null;if($id && !$edit)throw new \yii\web\NotFoundHttpException();
         if(Yii::$app->request->isPost){try{
             $data=Yii::$app->request->post();$user=$edit?:new User();$super=$this->actor()->role==='superadmin';
-            if(!$super && (($edit && $edit->isAdmin()) || in_array($data['role']??'',['admin','superadmin'],true)))throw new DomainException('Administrator hisoblarini faqat superadministrator boshqaradi.');
-            $username=trim((string)($data['username']??''));$name=trim((string)($data['name']??''));$role=(string)($data['role']??'');$category=(string)($data['category']??'');
+            $previousRole=$edit?->role??'unassigned';
+            $role=\app\services\AccountPolicy::role($this->actor(),$edit,array_key_exists('role',$data)?(string)$data['role']:null);
+            $username=trim((string)($data['username']??''));$name=trim((string)($data['name']??''));$category=(string)($data['category']??'');
             if(!preg_match('/^[A-Za-z0-9_.-]{3,80}$/',$username))throw new DomainException('Login 3–80 ta lotin harfi, raqam, nuqta, tire yoki pastki chiziqdan iborat bo‘lsin.');
             if(!$name || mb_strlen($name)>200 || !isset(User::ROLES[$role]))throw new DomainException('Ism va rolni to‘g‘ri kiriting.');
             if($category!=='' && !isset(Catalog::CATEGORIES[$category]))throw new DomainException('Toifa noto‘g‘ri.');
@@ -26,10 +27,13 @@ class AdminController extends BaseController
             if(($role==='head' && (!$org || $org['kind']!=='department')) || ($role==='faculty' && (!$org || $org['kind']!=='faculty')))throw new DomainException('Kafedra mudiriga kafedra, fakultet mas’uliga fakultet tanlang.');
             if(User::find()->where(['username'=>$username])->andFilterWhere($id?['<>','id',$id]:[])->exists())throw new DomainException('Bu login band.');
             $password=(string)($data['password']??'');if((!$edit || $password!=='') && (strlen($password)<12 || strlen($password)>128))throw new DomainException('Parol 12–128 belgi bo‘lsin.');
+            $hemisId=trim((string)($data['hemis_id']??$edit?->hemis_id??''));if($hemisId!=='' && !preg_match('/^[0-9]{1,40}$/',$hemisId))throw new DomainException('HEMIS ID faqat raqamlardan iborat bo‘lsin.');if($hemisId!=='' && User::find()->where(['hemis_id'=>$hemisId])->andFilterWhere($id?['<>','id',$id]:[])->exists())throw new DomainException('Bu HEMIS ID boshqa hisobga biriktirilgan.');
+            $user->hemis_id=$hemisId?:null;
             $user->username=$username;$user->name=$name;$user->role=$role;$user->category=$category?:null;$user->org_id=$orgId?:null;$user->active=$active;
             $user->degree=mb_substr(trim((string)($data['degree']??'')),0,50);$user->position=mb_substr(trim((string)($data['position']??'')),0,100);
+            $profile=json_decode($edit?->hemis_profile??'{}',true)?:[];$incoming=Yii::$app->request->post('profile',[]);foreach(['academic_rank','employment_form','employment_staff','employee_type','phone','email'] as $key){if(!array_key_exists($key,$incoming))continue;$value=trim((string)($incoming[$key]??''));$profile[$key]=$value===''?null:mb_substr($value,0,200);}$user->hemis_profile=json_encode($profile,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
             if(!$edit)$user->created_at=time();if($password!==''){$user->setPassword($password);$user->must_change_password=1;}
-            $user->save(false);Catalog::audit((int)$this->actor()->id,'user_save','User #'.$user->id);Yii::$app->session->setFlash('success','Foydalanuvchi saqlandi.');return $this->redirect(['users']);
+            $user->save(false);Catalog::audit((int)$this->actor()->id,'user_save',json_encode(['user_id'=>$user->id,'role_before'=>$previousRole,'role_after'=>$role,'org_id'=>$user->org_id],JSON_THROW_ON_ERROR));Yii::$app->session->setFlash('success','Foydalanuvchi saqlandi.');return $this->redirect(['users']);
         }catch(\Throwable $e){$this->message($e);}}
         return $this->render('users',['edit'=>$edit,'rows'=>User::find()->orderBy('name')->all(),'orgs'=>(new Query())->from('org')->orderBy('name')->all()]);
     }
@@ -39,11 +43,7 @@ class AdminController extends BaseController
         if($id && !$edit)throw new \yii\web\NotFoundHttpException();
         if(Yii::$app->request->isPost){try{
             $name=trim((string)Yii::$app->request->post('name'));$kind=(string)Yii::$app->request->post('kind');$parent=(int)Yii::$app->request->post('parent_id');
-            if($name==='' || mb_strlen($name)>200 || !in_array($kind,['university','faculty','department'],true))throw new DomainException('Nom va turini to‘g‘ri kiriting.');
-            $p=$parent?(new Query())->from('org')->where(['id'=>$parent])->one():null;
-            if(($kind==='faculty' && (!$p || $p['kind']!=='university')) || ($kind==='department' && (!$p || $p['kind']!=='faculty')) || ($kind==='university' && $parent))throw new DomainException('Tuzilma: universitet → fakultet → kafedra.');
-            if($id && $kind!==$edit['kind'])throw new DomainException('Mavjud bo‘lim turi o‘zgartirilmaydi; yangi bo‘lim yarating.');
-            $values=['name'=>$name,'kind'=>$kind,'parent_id'=>$parent?:null];$cmd=Yii::$app->db->createCommand();if($id)$cmd->update('org',$values,['id'=>$id])->execute();else $cmd->insert('org',$values)->execute();
+            \app\services\Organization::save($name,$kind,$parent?:null,$id);
             Catalog::audit((int)$this->actor()->id,'org_save',$name);Yii::$app->session->setFlash('success','Tuzilma saqlandi.');return $this->redirect(['structure']);
         }catch(\Throwable $e){$this->message($e);}}
         return $this->render('structure',['edit'=>$edit,'rows'=>(new Query())->from('org')->orderBy(['kind'=>SORT_DESC,'name'=>SORT_ASC])->all()]);
@@ -108,12 +108,12 @@ class AdminController extends BaseController
             if($op==='configure'){\app\services\Hemis::configure((string)Yii::$app->request->post('host'),(string)Yii::$app->request->post('token'));$message='HEMIS sozlamalari saqlandi.';}
             elseif($op==='test'){ $items=\app\services\Hemis::fetch('structure');$message='HEMIS ulanishi ishladi. Tuzilma yozuvlari: '.count($items); }
             elseif(in_array($op,['structure','employees'],true)){
-                $items=\app\services\Hemis::fetch($op);$result=$op==='structure'?\app\services\Hemis::applyStructure($items):\app\services\Hemis::applyEmployees($items);
-                $message='Import: '.$result['saved'].' saqlandi, '.$result['skipped'].' o‘tkazildi.';
+                $items=\app\services\Hemis::fetch($op);$result=$op==='structure'?\app\services\Hemis::applyStructure($items,(int)Yii::$app->request->post('university_id')?:null):\app\services\Hemis::applyEmployees($items);
+                $message='Import: '.$result['saved'].' saqlandi, '.$result['skipped'].' o‘tkazildi.'.(!empty($result['unlinked'])?' Bolimga biriktirilmagan: '.$result['unlinked'].'. Avval tuzilmani import qiling, keyin xodimlarni qayta yuklang.':'');
             }else throw new DomainException('Amal noma’lum.');
             Catalog::audit((int)$this->actor()->id,'hemis_'.$op,$message);Yii::$app->session->setFlash('success',$message);return $this->refresh();
         }catch(\Throwable $e){$this->message($e);}}
-        return $this->render('hemis',['settings'=>\app\services\Hemis::settings()]);
+        return $this->render('hemis',['settings'=>\app\services\Hemis::settings(),'universities'=>(new Query())->from('org')->where(['kind'=>'university'])->all()]);
     }
     public function actionAudit(){return $this->render('audit',['rows'=>(new Query())->select(['a.*','actor'=>'u.name'])->from(['a'=>'audit'])->leftJoin(['u'=>'user'],'u.id=a.actor_id')->orderBy(['a.id'=>SORT_DESC])->limit(300)->all()]);}
 }

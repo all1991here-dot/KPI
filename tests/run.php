@@ -4,7 +4,7 @@ Yii::setAlias('@app',dirname(__DIR__));
 $dir=dirname(__DIR__).'/runtime/tests-'.bin2hex(random_bytes(6));mkdir($dir,0700,true);
 $config=require dirname(__DIR__).'/config/console.php';$config['runtimePath']=$dir;$config['components']['db']=['class'=>yii\db\Connection::class,'dsn'=>'sqlite:'.$dir.'/test.sqlite'];
 new yii\console\Application($config);
-require dirname(__DIR__).'/migrations/m261105_000001_initial.php';ob_start();(new m261105_000001_initial())->up();ob_end_clean();Yii::$app->db->schema->refresh();
+require dirname(__DIR__).'/migrations/m261105_000001_initial.php';ob_start();(new m261105_000001_initial())->up();ob_end_clean();require dirname(__DIR__).'/migrations/m261106_000001_employee_profile.php';ob_start();(new m261106_000001_employee_profile())->up();ob_end_clean();Yii::$app->db->schema->refresh();
 use app\services\{Catalog,Workflow,ScoreCalculator,Access,Hemis};use app\models\User;use yii\db\Query;
 $count=0;
 function check(bool $condition,string $name):void{global $count;if(!$condition)throw new RuntimeException('FAIL '.$name);$count++;echo "PASS $name\n";}
@@ -78,5 +78,45 @@ try{
  $sum=(int)(clone $scope)->andWhere(['a.status'=>'approved'])->sum('a.score_cents');
  check(array_sum(array_column($details['series'],'cents'))===$sum,'dashboard chart equals approved activity scores');
  check(count(array_filter($details['awaiting'],fn($a)=>(int)$a['employee_id']!==(int)$teacher->id))===0,'dashboard pending rows preserve employee scope');
+
+ $ordinaryAdmin=user('ordinary_admin','admin',null);
+ denied(fn()=>\app\services\AccountPolicy::role($ordinaryAdmin,$teacher,'expert'),'admin cannot grant ordinary role');
+ denied(fn()=>\app\services\AccountPolicy::role($ordinaryAdmin,$teacher,'unassigned'),'admin cannot remove role');
+ check(\app\services\AccountPolicy::role($ordinaryAdmin,$teacher,null)==='teacher','admin can retain existing role');
+ check(\app\services\AccountPolicy::role($ordinaryAdmin,null,null)==='unassigned','new admin-created account has no role');
+ check(\app\services\AccountPolicy::role($admin,$teacher,'expert')==='expert','superadmin can assign role');
+ check(\app\services\AccountPolicy::role($admin,$teacher,'unassigned')==='unassigned','superadmin can remove role');
+ denied(fn()=>\app\services\Organization::save('Bad faculty','faculty',$department),'faculty cannot attach to department');
+ denied(fn()=>\app\services\Organization::save('Bad department','department',$university),'department cannot attach directly to university');
+ $root=\app\services\Organization::save('Manual University','university',null);
+ $fac=\app\services\Organization::save('Manual Faculty','faculty',$root);
+ $dep=\app\services\Organization::save('Manual Department','department',$fac);
+ $labels=\app\services\Organization::labels((new Query())->from('org')->all());check($labels[$dep]==='Manual University → Manual Faculty → Manual Department','complete assignment path');
+ denied(fn()=>Hemis::applyStructure($structure),'multiple universities require explicit selection');
+ check(Hemis::applyStructure($structure,$root)['saved']===2,'HEMIS imports into selected manual university');
+ check($imported->role==='unassigned','HEMIS cannot grant a role');
+ $imported->role='head';$imported->active=1;$imported->category='PHD';$imported->save(false);$passwordHash=$imported->password_hash;
+ Hemis::applyEmployees([['id'=>501,'full_name'=>'Complete Employee','_department'=>['id'=>101],'academicDegree'=>['name'=>'PhD'],'academicRank'=>['name'=>'Dotsent'],'staffPosition'=>['name'=>'Professor'],'employmentForm'=>['name'=>'Asosiy'],'employmentStaff'=>['name'=>'1.0'],'phone'=>'+998000000000','email'=>'test@example.test','image'=>'/static/test.jpg']]);
+ $updated=User::findOne($imported->id);$profile=json_decode($updated->hemis_profile,true);
+ check($updated->role==='head' && $updated->active && $updated->category==='PHD' && $updated->password_hash===$passwordHash,'HEMIS preserves roles, activity, category and password');
+ check($updated->org_id!==null && $updated->degree==='PhD' && $updated->position==='Professor' && $profile['academic_rank']==='Dotsent' && $profile['employment_staff']==='1.0' && $profile['email']==='test@example.test','complete HEMIS profile and department linked');
+ check(\app\services\EmployeePhoto::url('/static/test.jpg','student.fdu.uz')==='https://student.fdu.uz/static/test.jpg','HEMIS relative employee image');
+ check(\app\services\EmployeePhoto::url('javascript:alert(1)','student.fdu.uz')===null,'unsafe employee image rejected');
+ check(\app\services\EmployeePhoto::url('https://cdn.example.test/photo','student.fdu.uz')==='https://cdn.example.test/photo','HTTPS HEMIS photo CDN supported without forwarding API key');
+ Hemis::applyEmployees([['id'=>501,'full_name'=>'Complete Employee']]);$updated=User::findOne($imported->id);$profile=json_decode($updated->hemis_profile,true);
+ check($updated->org_id===null && $updated->degree===null && $profile['phone']===null,'missing HEMIS values stored as absent rather than stale');
+ $approved=Workflow::application($id);denied(fn()=>Workflow::save($teacher,$approved,[],$id),'teacher cannot edit approved document');
+ Workflow::save($ordinaryAdmin,array_merge($approved,['title'=>'Administrator correction']),[],$id);
+ $corrected=Workflow::application($id);check($corrected['status']==='draft' && (int)$corrected['employee_id']===(int)$teacher->id && $corrected['category']===$approved['category'],'admin edits another employee document without changing ownership/category');
+ check((int)(new Query())->from('score_entry')->where(['application_id'=>$id])->sum('amount_cents')===0 && (int)$corrected['score_cents']===0,'admin correction reverses previous score exactly once');
+ Workflow::save($admin,$corrected,[],$id);check((int)(new Query())->from('score_entry')->where(['application_id'=>$id])->sum('amount_cents')===0,'repeated admin correction does not reverse score twice');
+ check((new Query())->from('audit')->where(['action'=>'application_admin_edit'])->exists(),'admin correction retains before and after audit');
+ Yii::$app->db->createCommand()->update('period',['closed'=>1],['id'=>$period])->execute();Workflow::save($ordinaryAdmin,$corrected,[],$id);check(Workflow::application($id)['status']==='draft','admin may correct closed-period document');
+
+ $manualFaculty=\app\services\Organization::save('Matched Faculty','faculty',$root);
+ $manualDepartment=\app\services\Organization::save('Matched Department','department',$manualFaculty);
+ Hemis::applyStructure([['id'=>901,'name'=>'Matched Faculty','structureType'=>['code'=>'12']],['id'=>902,'name'=>'Matched Department','structureType'=>['code'=>'13'],'parent'=>['id'=>901]]],$root);
+ check((int)(new Query())->from('org')->where(['hemis_id'=>'901'])->scalar()===$manualFaculty,'HEMIS reuses matching manual faculty');
+ check((int)(new Query())->from('org')->where(['hemis_id'=>'902'])->scalar()===$manualDepartment,'HEMIS reuses matching manual department');
  echo "\nSUCCESS: $count checks completed.\n";
 }catch(Throwable $e){fwrite(STDERR,$e."\n");exit(1);}

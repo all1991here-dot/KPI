@@ -43,12 +43,13 @@ class KpiController extends BaseController
     public function actionCreate(?int $id=null)
     {
         $row=$id?Workflow::application($id):['period_id'=>'','indicator_id'=>'','title'=>'','activity_date'=>date('Y-m-d'),'quantity'=>1,'metric_value'=>'','notes'=>''];
-        if($id && ((int)$row['employee_id']!==(int)$this->actor()->id || !in_array($row['status'],['draft','returned'],true)))throw new \yii\web\ForbiddenHttpException('Tahrirlashga ruxsat yo‘q.');
+        if($id && !$this->actor()->isAdmin() && ((int)$row['employee_id']!==(int)$this->actor()->id || !in_array($row['status'],['draft','returned'],true)))throw new \yii\web\ForbiddenHttpException('Tahrirlashga ruxsat yo‘q.');
+        $category=$id && $this->actor()->isAdmin()?$row['category']:$this->actor()->category;
         if(Yii::$app->request->isPost){
             $row=array_merge($row,Yii::$app->request->post());
-            try{$saved=Workflow::save($this->actor(),Yii::$app->request->post(),\yii\web\UploadedFile::getInstancesByName('evidence'),$id);Yii::$app->session->setFlash('success','Qoralama saqlandi. Dalillarni tekshirib, yuborish tugmasini bosing.');return $this->redirect(['view','id'=>$saved]);}catch(\Throwable $e){$this->message($e);}
+            try{$saved=Workflow::save($this->actor(),Yii::$app->request->post(),\yii\web\UploadedFile::getInstancesByName('evidence'),$id);Yii::$app->session->setFlash('success',$id && $this->actor()->isAdmin()?'Hujjat tahrirlandi. Egasi qayta tekshiruvga yuborishi kerak.':'Qoralama saqlandi. Dalillarni tekshirib, yuborish tugmasini bosing.');return $this->redirect(['view','id'=>$saved]);}catch(\Throwable $e){$this->message($e);}
         }
-        return $this->render('create',['row'=>$row,'id'=>$id,'periods'=>(new Query())->from('period')->where(['closed'=>0])->orderBy(['starts'=>SORT_DESC])->all(),'indicators'=>(new Query())->from('indicator')->where(['category'=>$this->actor()->category])->orderBy('id')->all()]);
+        return $this->render('create',['row'=>$row,'id'=>$id,'periods'=>(new Query())->from('period')->where($id && $this->actor()->isAdmin()?['or',['closed'=>0],['id'=>$row['period_id']]]:['closed'=>0])->orderBy(['starts'=>SORT_DESC])->all(),'indicators'=>(new Query())->from('indicator')->where(['category'=>$category])->orderBy('id')->all()]);
     }
     public function actionView(int $id)
     {

@@ -46,10 +46,12 @@ class Hemis
         }
         throw new DomainException('Import 200 sahifadan oshdi; natija qo‘llanmadi.');
     }
-    public static function applyStructure(array $items): array
+    public static function applyStructure(array $items,?int $universityId=null): array
     {
-        return Yii::$app->db->transaction(function()use($items){
-            $university=(new Query())->from('org')->where(['kind'=>'university'])->one();if(!$university)throw new DomainException('Avval universitet yarating.');
+        return Yii::$app->db->transaction(function()use($items,$universityId){
+            $roots=(new Query())->from('org')->where(['kind'=>'university'])->all();
+            $university=$universityId?(new Query())->from('org')->where(['id'=>$universityId,'kind'=>'university'])->one():(count($roots)===1?$roots[0]:null);
+            if(!$university || trim($university['name'])==='Universitet')throw new DomainException('Avval universitet nomini qolda toldiring va import uchun universitetni tanlang.');
             $map=[];$result=['saved'=>0,'skipped'=>0];
             foreach($items as $item){$id=self::id($item['id']??null);if($id)$map[$id]=$item;}
             foreach(['12'=>'faculty','13'=>'department'] as $code=>$kind){
@@ -66,6 +68,7 @@ class Hemis
                         if(!$faculty){$result['skipped']++;continue;}$parent=$faculty['id'];
                     }
                     $old=(new Query())->from('org')->where(['hemis_id'=>(string)$id])->one();
+                    if(!$old){$manual=(new Query())->from('org')->where(['name'=>$name,'kind'=>$kind,'parent_id'=>$parent,'hemis_id'=>null])->all();if(count($manual)>1){$result['skipped']++;continue;}if(count($manual)===1)$old=$manual[0];}
                     if($old && $old['kind']!==$kind){$result['skipped']++;continue;}
                     $values=['hemis_id'=>(string)$id,'name'=>mb_substr($name,0,200),'kind'=>$kind,'parent_id'=>$parent];$command=Yii::$app->db->createCommand();
                     if($old)$command->update('org',$values,['id'=>$old['id']])->execute();else $command->insert('org',$values)->execute();$result['saved']++;
@@ -82,16 +85,33 @@ class Hemis
                 $id=self::id($item['id']??null);$name=trim((string)($item['full_name']??$item['fullName']??$item['name']??''));
                 if(!$name)$name=trim(implode(' ',[$item['second_name']??'',$item['first_name']??'',$item['third_name']??'']));
                 if(!$id || !$name){$result['skipped']++;continue;}
-                $department=self::id($item['department']??$item['department_id']??null);$org=$department?(new Query())->from('org')->where(['hemis_id'=>$department])->one():null;
+                $department=self::id($item['department']??$item['_department']??$item['department_id']??null);$org=$department?(new Query())->from('org')->where(['hemis_id'=>$department])->one():null;
                 $user=User::findOne(['hemis_id'=>$id]);$new=!$user;
-                if($new){$user=new User();$user->username='hemis_'.$id;if(User::findOne(['username'=>$user->username])){$result['skipped']++;continue;}$user->role='teacher';$user->active=0;$user->must_change_password=1;$user->created_at=time();$user->setPassword(Yii::$app->security->generateRandomString(48));$user->hemis_id=$id;}
-                $user->name=mb_substr($name,0,200);if($org)$user->org_id=$org['id'];
-                $degree=$item['academicDegree']??$item['academic_degree']??[];$position=$item['staffPosition']??$item['position']??[];
-                $user->degree=mb_substr(is_array($degree)?(string)($degree['name']??''):(string)$degree,0,50);$user->position=mb_substr(is_array($position)?(string)($position['name']??''):(string)$position,0,100);
+                if($new){$user=new User();$user->username='hemis_'.$id;if(User::findOne(['username'=>$user->username])){$result['skipped']++;continue;}$user->role='unassigned';$user->active=0;$user->must_change_password=1;$user->created_at=time();$user->setPassword(Yii::$app->security->generateRandomString(48));$user->hemis_id=$id;}
+                $user->name=mb_substr($name,0,200);$user->org_id=$org?$org['id']:null;
+                $result['unlinked']=($result['unlinked']??0)+($org?0:1);
+                $user->degree=self::text($item['academicDegree']??$item['academic_degree']??null,50);
+                $user->position=self::text($item['staffPosition']??$item['position']??$item['employeeType']??null,100);
+                $profile=[
+                    'photo_url'=>EmployeePhoto::fromItem($item),
+                    'academic_rank'=>self::text($item['academicRank']??$item['academic_rank']??null),
+                    'employment_form'=>self::text($item['employmentForm']??$item['employment_form']??null),
+                    'employment_staff'=>self::text($item['employmentStaff']??$item['employment_staff']??$item['rate']??null),
+                    'employee_type'=>self::text($item['employeeType']??$item['employee_type']??null),
+                    'phone'=>self::text($item['phone']??$item['phone_number']??null),
+                    'email'=>self::text($item['email']??null),
+                ];
+                $user->hemis_profile=json_encode($profile,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
                 $user->save(false);$result['saved']++;
             }
             return $result;
         });
+    }
+    private static function text($value,int $max=200): ?string
+    {
+        if(is_array($value))$value=$value['name']??$value['value']??null;
+        if(!is_scalar($value))return null;
+        $value=trim((string)$value);return $value===''?null:mb_substr($value,0,$max);
     }
     private static function id($value): ?string
     {

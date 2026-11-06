@@ -21,7 +21,6 @@ class SetupController extends Controller
         if (!(new Query())->from('route_step')->exists()) {
             foreach ([[1,'Kafedra tekshiruvi',['head']],[2,'Fakultet / ekspert',['faculty','expert']],[3,'Yakuniy tasdiq',['admin','superadmin']]] as [$pos,$name,$roles]) Yii::$app->db->createCommand()->insert('route_step',['position'=>$pos,'name'=>$name,'roles'=>json_encode($roles)])->execute();
         }
-        if (!(new Query())->from('org')->exists()) Yii::$app->db->createCommand()->insert('org',['name'=>'Universitet','kind'=>'university'])->execute();
         if (!User::find()->exists()) {
             $password=getenv('KPI_ADMIN_PASSWORD');
             if (!$password) {

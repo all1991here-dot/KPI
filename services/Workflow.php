@@ -17,10 +17,13 @@ class Workflow
     public static function save(User $actor, array $data, array $files, ?int $id=null): int
     {
         $old=$id?self::application($id):null;
-        if ($old && ((int)$old['employee_id']!==(int)$actor->id || !in_array($old['status'],['draft','returned'],true))) throw new DomainException('Faqat o‘zingizning qoralama yoki qaytarilgan arizangizni tahrirlaysiz.');
+        if ($old && !$actor->isAdmin() && ((int)$old['employee_id']!==(int)$actor->id || !in_array($old['status'],['draft','returned'],true))) throw new DomainException('Faqat o‘zingizning qoralama yoki qaytarilgan arizangizni tahrirlaysiz.');
+        $employee=$old?User::findOne($old['employee_id']):$actor;
+        if(!$employee)throw new DomainException('Ariza egasi topilmadi.');
+        $category=$old && $actor->isAdmin()?$old['category']:$employee->category;
         $period=(new Query())->from('period')->where(['id'=>(int)($data['period_id']??0)])->one();
-        $indicator=(new Query())->from('indicator')->where(['id'=>(int)($data['indicator_id']??0),'category'=>$actor->category])->one();
-        if (!$period || $period['closed']) throw new DomainException('Ochiq baholash davrini tanlang.');
+        $indicator=(new Query())->from('indicator')->where(['id'=>(int)($data['indicator_id']??0),'category'=>$category])->one();
+        if (!$period || ($period['closed'] && !($old && $actor->isAdmin()))) throw new DomainException('Ochiq baholash davrini tanlang.');
         if (!$indicator) throw new DomainException('Profilingiz toifasiga mos ko‘rsatkichni tanlang.');
         $title=trim((string)($data['title']??''));$date=(string)($data['activity_date']??'');$quantity=filter_var($data['quantity']??null,FILTER_VALIDATE_INT);
         if ($title==='' || mb_strlen($title)>250) throw new DomainException('Faoliyat nomi 1–250 belgidan iborat bo‘lsin.');
@@ -43,10 +46,11 @@ class Workflow
         if ($count+count($prepared)>10) throw new DomainException('Har arizaga maksimal 10 ta dalil biriktiring.');
         $paths=[];
         try {
-            return Yii::$app->db->transaction(function()use($actor,$data,$old,$id,$period,$indicator,$title,$date,$quantity,$notes,$metric,$prepared,&$paths){
+            return Yii::$app->db->transaction(function()use($actor,$data,$old,$id,$period,$indicator,$category,$title,$date,$quantity,$notes,$metric,$prepared,&$paths){
                 self::lockPeriod((int)$period['id']);
-                if ($id) { $fresh=self::application($id);if(!in_array($fresh['status'],['draft','returned'],true))throw new DomainException('Ariza holati o‘zgardi. Sahifani yangilang.'); }
-                $values=['period_id'=>$period['id'],'indicator_id'=>$indicator['id'],'category'=>$actor->category,'title'=>$title,'activity_date'=>$date,'quantity'=>$quantity,'metric_value'=>$metric,'notes'=>$notes,'updated_at'=>time(),'expert_score'=>null,'score_cents'=>0,'rule_snapshot'=>null,'route_snapshot'=>null,'step'=>0];
+                if ($id) { self::lockPeriod((int)$old['period_id']);$fresh=self::application($id);if(!$actor->isAdmin() && !in_array($fresh['status'],['draft','returned'],true))throw new DomainException('Ariza holati o‘zgardi. Sahifani yangilang.'); }
+                $values=['period_id'=>$period['id'],'indicator_id'=>$indicator['id'],'category'=>$category,'title'=>$title,'activity_date'=>$date,'quantity'=>$quantity,'metric_value'=>$metric,'notes'=>$notes,'updated_at'=>time(),'expert_score'=>null,'score_cents'=>0,'rule_snapshot'=>null,'route_snapshot'=>null,'step'=>0];
+                if($id && $actor->isAdmin()){$balance=(int)(new Query())->from('score_entry')->where(['application_id'=>$id])->sum('amount_cents');if($balance)self::ledger($id,$actor,-$balance,'Administrator tahriri: avvalgi ball bekor qilindi.');$values['status']='draft';Catalog::audit((int)$actor->id,'application_admin_edit',json_encode(['id'=>$id,'before'=>$fresh,'after'=>$values],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR));self::history($id,$actor,'admin_edit','Administrator tahriri. Oldingi holat: '.$fresh['status'].'. Qayta tasdiqlash talab etiladi.',0);}
                 if ($id) Yii::$app->db->createCommand()->update('application',$values,['id'=>$id])->execute();
                 else {Yii::$app->db->createCommand()->insert('application',$values+['employee_id'=>$actor->id,'uuid'=>Yii::$app->security->generateRandomString(32),'status'=>'draft','created_at'=>time()])->execute();$id=(int)Yii::$app->db->getLastInsertID();}
                 $dir=Yii::getAlias('@runtime/evidence');if(!is_dir($dir))mkdir($dir,0700,true);
@@ -63,8 +67,8 @@ class Workflow
     {
         $file=(new Query())->from('evidence')->where(['id'=>$id])->one();if(!$file)throw new DomainException('Dalil topilmadi.');
         $app=self::application((int)$file['application_id']);
-        if ((int)$app['employee_id']!==(int)$actor->id || !in_array($app['status'],['draft','returned'],true))throw new DomainException('Dalilni o‘chirishga ruxsat yo‘q.');
-        Yii::$app->db->transaction(function()use($actor,$id,$file,$app){self::lockPeriod((int)$app['period_id']);$fresh=self::application((int)$app['id']);if(!in_array($fresh['status'],['draft','returned'],true))throw new DomainException('Ariza holati o‘zgardi.');Yii::$app->db->createCommand()->delete('evidence',['id'=>$id])->execute();self::history((int)$app['id'],$actor,'remove_evidence','Dalil olib tashlandi.',0);});
+        if (!$actor->isAdmin() && ((int)$app['employee_id']!==(int)$actor->id || !in_array($app['status'],['draft','returned'],true)))throw new DomainException('Dalilni o‘chirishga ruxsat yo‘q.');
+        Yii::$app->db->transaction(function()use($actor,$id,$file,$app){self::lockPeriod((int)$app['period_id']);$fresh=self::application((int)$app['id']);if(!$actor->isAdmin() && !in_array($fresh['status'],['draft','returned'],true))throw new DomainException('Ariza holati o‘zgardi.');if($actor->isAdmin()){$balance=(int)(new Query())->from('score_entry')->where(['application_id'=>$app['id']])->sum('amount_cents');if($balance)self::ledger((int)$app['id'],$actor,-$balance,'Dalil administrator tomonidan tahrirlandi.');Yii::$app->db->createCommand()->update('application',['status'=>'draft','step'=>0,'score_cents'=>0,'expert_score'=>null,'rule_snapshot'=>null,'route_snapshot'=>null,'updated_at'=>time()],['id'=>$app['id']])->execute();}Yii::$app->db->createCommand()->delete('evidence',['id'=>$id])->execute();self::history((int)$app['id'],$actor,'remove_evidence','Dalil olib tashlandi.',0);});
         @unlink(Yii::getAlias('@runtime/evidence/').$file['storage_name']);
     }
     public static function act(User $actor,int $id,string $action,string $reason='', $expert=null): void
