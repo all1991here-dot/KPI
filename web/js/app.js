@@ -2,8 +2,9 @@
   'use strict';
   const root = document.documentElement;
   root.classList.add('has-js');
-  let theme = 'light';
-  try { theme = localStorage.getItem('kpi-theme') === 'dark' ? 'dark' : 'light'; } catch (_) {}
+  const themeKey = root.dataset.skin === 'galaxy' ? 'kpi-galaxy-theme' : 'kpi-theme';
+  let theme = root.dataset.theme || 'light';
+  try { const saved = localStorage.getItem(themeKey); if (saved === 'dark' || saved === 'light') theme = saved; } catch (_) {}
   const applyTheme = (value) => {
     theme = value;
     root.dataset.theme = value;
@@ -16,7 +17,7 @@
   applyTheme(theme);
   document.querySelectorAll('[data-theme-toggle]').forEach(button => button.addEventListener('click', () => {
     applyTheme(theme === 'dark' ? 'light' : 'dark');
-    try { localStorage.setItem('kpi-theme', theme); } catch (_) {}
+    try { localStorage.setItem(themeKey, theme); } catch (_) {}
   }));
   const sidebar = document.getElementById('app-sidebar');
   const toggle = document.querySelector('[data-menu-toggle]');

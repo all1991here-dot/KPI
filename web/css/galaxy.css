@@ -1,0 +1,39 @@
+/* Approved variant 6: Sokin galaktika. Decoration stays behind opaque content. */
+html[data-skin=galaxy][data-theme=dark]{color-scheme:dark;--canvas:#071326;--surface:#10243e;--surface-soft:#142d49;--ink:#edf3ff;--ink-secondary:#c8d7ed;--muted:#a6bbd6;--border:#2b4564;--accent:#9cbcff;--accent-strong:#c1d2ff;--accent-soft:#20385c;--focus:#acbfff;--sidebar:#06162b;--shadow:0 8px 28px #020a181f}
+body.galaxy-app{background:var(--canvas);isolation:isolate}
+.galaxy-app .workspace{position:relative;isolation:isolate;background:transparent;min-height:100vh}
+.galaxy-app .workspace:before,.galaxy-app .workspace:after{content:'';position:fixed;inset:0 0 0 226px;z-index:-1;pointer-events:none}
+html[data-theme=dark] .galaxy-app .workspace:before{background:radial-gradient(ellipse at 96% 18%,#6256b52b,transparent 43%),radial-gradient(ellipse at 8% 92%,#1d6ebc30,transparent 48%),linear-gradient(150deg,#071326,#0a1830 65%,#101b37)}
+html[data-theme=dark] .galaxy-app .workspace:after{opacity:.5;background-image:radial-gradient(circle at 13% 19%,#b7d9ff 0 .7px,transparent 1.2px),radial-gradient(circle at 78% 34%,#9eaeef 0 .8px,transparent 1.3px),radial-gradient(circle at 44% 77%,#85c1ff 0 .6px,transparent 1.1px);background-size:271px 241px,419px 331px,367px 293px;mask-image:linear-gradient(90deg,#000,transparent 29%,transparent 72%,#000)}
+.galaxy-horizon{position:fixed;inset:auto -15vw -195px 9vw;height:290px;z-index:-1;pointer-events:none;border-radius:50% 50% 0 0;border-top:1px solid #8aa5ff70;box-shadow:0 -12px 50px #506de01a,inset 0 22px 38px #6862d71a;transform:rotate(-5deg)}
+.galaxy-horizon:after{content:'';position:absolute;inset:35px -15vw auto -7vw;height:220px;border-radius:50%;border-top:1px solid #789fee55;transform:rotate(9deg)}
+html[data-theme=light] .galaxy-horizon{display:none}
+html[data-theme=dark] .galaxy-app .sidebar{background:linear-gradient(180deg,#06162b,#081a32);border-right:1px solid #25405b}
+html[data-theme=dark] .galaxy-app .topbar{background:#091a30f5;border-bottom-color:var(--border)}
+html[data-theme=dark] .galaxy-app .card{background:var(--surface);border-color:var(--border);box-shadow:var(--shadow)}
+html[data-theme=dark] .galaxy-app .academic-metric{background:linear-gradient(120deg,#142d49,#10243e);border-color:var(--border)}
+html[data-theme=dark] .galaxy-app .academic-metric:after{background:#95b5ff05}
+html[data-theme=dark] .galaxy-app .button:not(.secondary):not(.danger){background:#155edb;color:#fff;border-color:#3375eb}
+html[data-theme=dark] .galaxy-app .button:not(.secondary):not(.danger):hover{background:#246be5}
+html[data-theme=dark] .galaxy-app .button.secondary{background:#142c48;color:#b7cdff;border-color:#365574}
+html[data-theme=dark] .galaxy-app .button.danger{background:#48263a;color:#ffb9c6;border-color:#86516a}
+html[data-theme=dark] .galaxy-app input:not([type=checkbox]),html[data-theme=dark] .galaxy-app select,html[data-theme=dark] .galaxy-app textarea{background:#0b1d33;color:var(--ink);border-color:#3b5675}
+html[data-theme=dark] .galaxy-app input::placeholder,html[data-theme=dark] .galaxy-app textarea::placeholder{color:#98aec9;opacity:1}
+html[data-theme=dark] .galaxy-app .alert.info{background:#132e4d;border-color:#345b85;color:#bdd9ff}
+html[data-theme=dark] .galaxy-app .alert.warning{background:#352e26;border-color:#806a43;color:#f7d798}
+html[data-theme=dark] .galaxy-app .alert.error{background:#402636;border-color:#845064;color:#ffc0cb}
+html[data-theme=dark] .galaxy-app .alert.success{background:#153b35;border-color:#357765;color:#b2efda}
+html[data-theme=dark] .galaxy-app .badge.approved{background:#173e39;color:#a2e6cc}
+html[data-theme=dark] .galaxy-app .badge.review{background:#203d65;color:#bed6ff}
+html[data-theme=dark] .galaxy-app .badge.submitted,html[data-theme=dark] .galaxy-app .badge.returned{background:#453726;color:#f1d29a}
+html[data-theme=dark] .galaxy-app .badge.rejected{background:#48293b;color:#ffc0d0}
+html[data-theme=dark] .galaxy-app .badge.draft{background:#2b3a51;color:#d0dbec}
+html[data-theme=dark] .galaxy-app .avatar{background:#203d65;color:#c9daff}
+html[data-theme=dark] .galaxy-app .empty-icon{background:#182f4d;color:#b2b7f2;border-color:#365477}
+html[data-theme=dark] .galaxy-app .academic-metric-icon{color:#94caff}
+html[data-theme=dark] .galaxy-app .academic-metric:nth-child(2n) .academic-metric-icon{color:#b6adff}
+html[data-theme=dark] .galaxy-app .chart-range-buttons button{background:#142c48;color:#c2d4ee;border-color:#365574}
+html[data-theme=dark] .galaxy-app .chart-range-buttons button[aria-pressed=true]{background:#2d3f6a;color:#e3dcff;border-color:#7e83c5}
+.galaxy-app :focus-visible{outline:2px solid var(--focus);outline-offset:3px}
+@media(max-width:1000px){.galaxy-app .workspace:before,.galaxy-app .workspace:after{left:0}.galaxy-horizon{left:-25vw}}
+@media print{html[data-skin=galaxy][data-theme]{color-scheme:light;--canvas:#fff;--surface:#fff;--surface-soft:#f1f4f9;--ink:#142b46;--ink-secondary:#354e6d;--muted:#52677e;--border:#cbd5e1;--accent:#164c99}.galaxy-app .workspace:before,.galaxy-app .workspace:after,.galaxy-horizon{display:none!important}body.galaxy-app{background:white!important;color:#142b46!important}.galaxy-app .card,.galaxy-app .academic-metric{background:white!important;box-shadow:none!important;color:#142b46!important}}

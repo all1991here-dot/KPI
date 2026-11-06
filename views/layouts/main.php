@@ -9,17 +9,18 @@ $navigation=[['kpi/index','Boshqaruv paneli','grid'],['kpi/create','Yangi faoliy
 $adminNavigation=[['users','Foydalanuvchilar','users'],['structure','Universitet tuzilmasi','building'],['periods','Baholash davrlari','calendar'],['rules','Hisoblash qoidalari','settings'],['route','Tasdiqlash bosqichlari','route'],['hemis','HEMIS integratsiyasi','link'],['audit','Amallar jurnali','history']];
 if($user && $user->role==='superadmin')$adminNavigation[]=['indicators','Mezonlarni boshqarish','book'];
 $pageTitle=str_replace([' · KPI',' · FarDU KPI'],'',$this->title?:'Boshqaruv paneli');
-$assetVersion='3.0.0';
+$assetVersion='3.1.0';
 ?>
 <?php $this->beginPage() ?>
-<!doctype html><html lang="uz" data-theme="light"><head>
+<!doctype html><html lang="uz" data-theme="<?= $user?'dark':'light' ?>" data-skin="<?= $user?'galaxy':'auth' ?>"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#111b35">
 <title><?= Ui::h($this->title?:'KPI · Universitet') ?></title><?= Html::csrfMetaTags() ?>
 <link rel="stylesheet" href="<?= Ui::h(Yii::$app->request->baseUrl) ?>/css/app.css?v=<?= $assetVersion ?>">
 <link rel="stylesheet" href="<?= Ui::h(Yii::$app->request->baseUrl) ?>/css/design.css?v=<?= $assetVersion ?>">
 <link rel="stylesheet" href="<?= Ui::h(Yii::$app->request->baseUrl) ?>/css/academic.css?v=<?= $assetVersion ?>">
+<?php if($user): ?><link rel="stylesheet" href="<?= Ui::h(Yii::$app->request->baseUrl) ?>/css/galaxy.css?v=<?= $assetVersion ?>"><?php endif ?>
 <script src="<?= Ui::h(Yii::$app->request->baseUrl) ?>/js/app.js?v=<?= $assetVersion ?>" defer></script>
-<?php $this->head() ?></head><body class="<?= $user?'academic-app':'academic-auth' ?>"><?php $this->beginBody() ?>
+<?php $this->head() ?></head><body class="<?= $user?'academic-app galaxy-app':'academic-auth' ?>"><?php $this->beginBody() ?>
 <?php if($user): ?>
 <a class="skip-link" href="#main">Asosiy qismga o‘tish</a>
 <aside class="sidebar" id="app-sidebar" aria-label="Asosiy menyu">
@@ -42,7 +43,7 @@ $assetVersion='3.0.0';
 <div class="sidebar-bottom"><div class="mobile-signout"><?= Html::beginForm(['auth/logout'],'post') ?><button class="button secondary" type="submit"><?= Ui::icon('logout') ?>Tizimdan chiqish</button><?= Html::endForm() ?></div><div class="workspace-note"><?= Ui::icon('check') ?><span>Shaffof baholash<small>Har bir natija dalil bilan.</small></span></div><div class="sidebar-version"><span class="dot"></span>FarDU KPI <span>Akademik</span></div></div>
 </aside>
 <button class="menu-overlay" data-menu-close type="button" aria-label="Menyuni yopish" tabindex="-1" hidden></button>
-<div class="workspace" id="app-workspace"><header class="topbar">
+<div class="workspace" id="app-workspace"><div class="galaxy-horizon" aria-hidden="true"></div><header class="topbar">
 <div class="topbar-location"><button class="icon-button mobile-menu" type="button" data-menu-toggle aria-controls="app-sidebar" aria-expanded="false" aria-label="Menyuni ochish"><?= Ui::icon('menu') ?></button><div class="breadcrumbs"><?= Ui::icon('building') ?><span>Ish maydoni</span><span class="crumb-divider">/</span><b><?= Ui::h($pageTitle) ?></b></div></div>
 <div class="topbar-actions"><?= Html::beginForm(['kpi/applications'],'get',['class'=>'header-search','role'=>'search']) ?><label><?= Ui::icon('search') ?><span class="sr-only">Arizalarni qidirish</span><input type="search" name="q" placeholder="Arizalarni qidirish…" autocomplete="off" aria-label="Arizalarni qidirish"></label><?= Html::endForm() ?>
 <button class="icon-button theme-toggle" type="button" data-theme-toggle aria-label="Tungi rejimni yoqish" aria-pressed="false"><span class="theme-moon"><?= Ui::icon('moon') ?></span><span class="theme-sun"><?= Ui::icon('sun') ?></span></button>
