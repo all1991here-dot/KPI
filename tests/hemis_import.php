@@ -29,4 +29,10 @@ $result=Hemis::applyEmployees($batch);check($result['created']===250,'bulk impor
 check((int)\app\models\User::find()->where(['active'=>1])->count()===0,'bulk-created accounts remain inactive');
 $authKeys=\app\models\User::find()->select('auth_key')->where(['hemis_id'=>array_column($batch,'id')])->column();check(count(array_unique($authKeys))===250,'each imported account has independent authentication key');
 $again=Hemis::applyEmployees($batch);check($again['created']===0 && $again['updated']===250,'bulk reimport updates without duplicates');
+$ids=\app\models\User::find()->select('id')->where(['hemis_id'=>array_column($batch,'id')])->column();
+\app\models\User::updateAll(['deleted_at'=>time(),'active'=>0],['id'=>$ids]);$skipped=Hemis::applyEmployees($batch);check($skipped['saved']===0 && $skipped['skipped']===250,'normal import does not silently restore deleted users');
+$super=new \app\models\User();$super->username='recovery_admin';$super->name='Recovery fixture';$super->role='superadmin';$super->active=1;$super->must_change_password=0;$super->created_at=time();$super->setPassword('OnlyForIsolated-RecoveryTest2026!');$super->save(false);
+$recovered=Hemis::applyEmployees($batch,true,$super);$afterIds=\app\models\User::find()->select('id')->where(['hemis_id'=>array_column($batch,'id'),'deleted_at'=>null])->column();sort($ids);sort($afterIds);
+check($recovered['restored']===250 && $recovered['unique_users']===250 && $ids===$afterIds,'explicit recovery restores all 250 original IDs without duplicates');
+check((int)\app\models\User::find()->where(['hemis_id'=>array_column($batch,'id'),'active'=>1])->count()===0,'recovered batch is visible but inactive');
 echo "SUCCESS: $count HEMIS import checks.\n";

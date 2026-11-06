@@ -131,10 +131,15 @@ try{
  $catalogCount=(int)(new Query())->from('indicator')->count();Catalog::import();check((int)(new Query())->from('indicator')->count()===$catalogCount,'startup does not resurrect deleted criteria');
  $badReport=Hemis::applyEmployees([null,['id'=>[],'name'=>[]],['id'=>999,'first_name'=>'Only','last_name'=>'Names']]);check($badReport['saved']===1 && $badReport['skipped']===2 && !empty($badReport['reasons']),'malformed employee rows reported without aborting whole import');
 
+ $teacher->hemis_id='88000';$teacher->save(false);$originalPassword=$teacher->password_hash;
  $historyCount=(int)(new Query())->from('application')->where(['employee_id'=>$teacher->id])->count();
  \app\services\Management::deleteUser($admin,(int)$teacher->id);check((int)(new Query())->from('application')->where(['employee_id'=>$teacher->id])->count()===$historyCount && User::findOne($teacher->id)!==null,'employee deletion preserves linked documents');
  \app\services\Management::deleteIndicator($admin,(int)$patent['id']);Catalog::import();check((new Query())->from('indicator')->where(['id'=>$patent['id']])->one()['deleted_at']!==null && Workflow::application($id)['indicator_id']==$patent['id'],'source criterion deletion survives reimport and preserves linked documents');
 
+ try{Hemis::applyEmployees([['id'=>88000,'full_name'=>'Restored teacher']],true,$ordinaryAdmin);throw new RuntimeException('Expected restore restriction');}catch(\yii\web\ForbiddenHttpException $e){check(true,'ordinary admin cannot restore deleted HEMIS accounts');}
+ $restored=Hemis::applyEmployees([['id'=>88000,'full_name'=>'Restored teacher'],['id'=>88000,'full_name'=>'Restored teacher']],true,$admin);$restoredTeacher=User::findOne($teacher->id);
+ check($restored['restored']===1 && $restored['unique_users']===1 && $restoredTeacher->deleted_at===null && !$restoredTeacher->active,'explicit HEMIS recovery restores one inactive account per ID');
+ check($restoredTeacher->password_hash===$originalPassword && $restoredTeacher->role==='teacher' && (int)(new Query())->from('application')->where(['employee_id'=>$teacher->id])->count()===$historyCount,'HEMIS recovery preserves password, role, employee ID and existing documents');
  $blockRoot=\app\services\Organization::save('Block University','university',null);$blockFaculty=\app\services\Organization::save('Block Faculty','faculty',$blockRoot);$blockDepartment=\app\services\Organization::save('Block Department','department',$blockFaculty);
  $blockTeacher=user('blocked_teacher','teacher',$blockDepartment);
  $blockPeriod=insert('period',['name'=>'Block test period','starts'=>'2026-01-01','ends'=>'2026-12-31','closed'=>0]);Catalog::createRules($blockPeriod);

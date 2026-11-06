@@ -17,7 +17,7 @@ class AdminController extends BaseController
         if($search!=='')$q->andWhere(['or',['like','name',$search],['like','username',$search]]);
         $status=(string)Yii::$app->request->get('status','');if(in_array($status,['active','inactive'],true))$q->andWhere(['active'=>$status==='active'?1:0]);
         $org=(int)Yii::$app->request->get('org',0);if($org){$all=(new Query())->from('org')->all();$ids=[$org];do{$before=count($ids);foreach($all as $r)if(in_array((int)$r['parent_id'],$ids,true) && !in_array((int)$r['id'],$ids,true))$ids[]=(int)$r['id'];}while(count($ids)>$before);$q->andWhere(['org_id'=>$ids]);}
-        return $this->render('users',['rows'=>$q->orderBy('name')->all(),'orgs'=>(new Query())->from('org')->orderBy('name')->all()]);
+        return $this->render('users',['rows'=>$q->orderBy('name')->all(),'orgs'=>(new Query())->from('org')->orderBy('name')->all(),'archivedHemisCount'=>(int)User::find()->where(['not',['deleted_at'=>null]])->andWhere(['not',['hemis_id'=>null]])->count()]);
     }
     public function actionUserEdit(?int $id=null)
     {
@@ -169,15 +169,16 @@ class AdminController extends BaseController
             if($op==='configure'){\app\services\Hemis::configure((string)Yii::$app->request->post('host'),(string)Yii::$app->request->post('token'));$message='HEMIS sozlamalari saqlandi.';}
             elseif($op==='test'){ $items=\app\services\Hemis::fetch('structure');$message='HEMIS ulanishi ishladi. Tuzilma yozuvlari: '.count($items); }
             elseif(in_array($op,['structure','employees'],true)){
-                $items=\app\services\Hemis::fetch($op);$result=$op==='structure'?\app\services\Hemis::applyStructure($items,(int)Yii::$app->request->post('university_id')?:null):\app\services\Hemis::applyEmployees($items);
+                $items=\app\services\Hemis::fetch($op);$result=$op==='structure'?\app\services\Hemis::applyStructure($items,(int)Yii::$app->request->post('university_id')?:null):\app\services\Hemis::applyEmployees($items,Yii::$app->request->post('restore_deleted')==='1',$this->actor());
                 if($op==='employees'){$result['finished_at']=date('Y-m-d H:i:s');file_put_contents(Yii::getAlias('@runtime/hemis-import-last.json'),json_encode($result,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),LOCK_EX);}
                 if($op==='structure'){$message='Tuzilma importi: '.$result['faculties'].' fakultet, '.$result['departments'].' kafedra, '.$result['units'].' bo‘lim. Turi tuzatilgan: '.$result['reclassified'].'. Tekshirish kerak: '.$result['needs_review'].'. ';}else $message='';
                 $message.='Import: '.$result['saved'].' saqlandi, '.$result['skipped'].' o‘tkazildi.'.(!empty($result['unlinked'])?' Bolimga biriktirilmagan: '.$result['unlinked'].'. Avval tuzilmani import qiling, keyin xodimlarni qayta yuklang.':'');
             }else throw new DomainException('Amal noma’lum.');
+            if($op==='employees'){$message.=' Qayta tiklandi: '.$result['restored'].'. Ro‘yxatga yozilgan xodimlar: '.$result['unique_users'].'.';if(!empty($result['reasons']['Superadministrator o‘chirgan hisob']))$message.=' Tiklash uchun “O‘chirilgan HEMIS hisoblarini qayta tiklash” belgisini tanlab qayta import qiling.';}
             if(in_array($op,['structure','employees'],true) && !empty($result['reasons'])){foreach($result['reasons'] as $reason=>$count)$message.=' '.$reason.': '.$count.'.';}
-            Catalog::audit((int)$this->actor()->id,'hemis_'.$op,$message);Yii::$app->session->setFlash($op==='employees' && empty($result['saved'])?'warning':'success',$message);return $this->refresh();
+            Catalog::audit((int)$this->actor()->id,'hemis_'.$op,$message);Yii::$app->session->setFlash($op==='employees' && (empty($result['saved']) || !empty($result['skipped']))?'warning':'success',$message);return $this->refresh();
         }catch(\Throwable $e){$this->message($e);}}
-        return $this->render('hemis',['settings'=>\app\services\Hemis::settings(),'universities'=>(new Query())->from('org')->where(['kind'=>'university'])->all(),'lastImport'=>is_file(Yii::getAlias('@runtime/hemis-import-last.json'))?json_decode(file_get_contents(Yii::getAlias('@runtime/hemis-import-last.json')),true):null]);
+        return $this->render('hemis',['settings'=>\app\services\Hemis::settings(),'universities'=>(new Query())->from('org')->where(['kind'=>'university'])->all(),'archivedHemisCount'=>(int)User::find()->where(['not',['deleted_at'=>null]])->andWhere(['not',['hemis_id'=>null]])->count(),'lastImport'=>is_file(Yii::getAlias('@runtime/hemis-import-last.json'))?json_decode(file_get_contents(Yii::getAlias('@runtime/hemis-import-last.json')),true):null]);
     }
     public function actionAudit(){return $this->render('audit',['rows'=>(new Query())->select(['a.*','actor'=>'u.name'])->from(['a'=>'audit'])->leftJoin(['u'=>'user'],'u.id=a.actor_id')->orderBy(['a.id'=>SORT_DESC])->limit(300)->all()]);}
 }

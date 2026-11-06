@@ -97,13 +97,14 @@ class Hemis
             return $result;
         });
     }
-    public static function applyEmployees(array $items): array
+    public static function applyEmployees(array $items,bool $restoreDeleted=false,?User $actor=null): array
     {
+        if($restoreDeleted && (!$actor || $actor->role!=='superadmin'))throw new \yii\web\ForbiddenHttpException('O‘chirilgan HEMIS hisoblarini faqat superadministrator tiklaydi.');
         $schema=Yii::$app->db->schema->getTableSchema('user',true);
         if(!isset($schema->columns['hemis_profile'],$schema->columns['deleted_at']))throw new DomainException('Xodim profili bazasi yangilanmagan. KPI qora oynasini yoping va start-native.bat bilan qayta oching; migratsiya bajarilishini kuting.');
         if(!$items)throw new DomainException('HEMIS 0 ta xodim qaytardi. API backend domeni va employee-list ruxsatini tekshiring. Mavjud hisoblar o‘zgarmadi.');
-        return Yii::$app->db->transaction(function()use($items){
-            $result=['received'=>count($items),'saved'=>0,'created'=>0,'updated'=>0,'skipped'=>0,'unlinked'=>0,'reasons'=>[]];$initialHash=null;
+        return Yii::$app->db->transaction(function()use($items,$restoreDeleted,$actor){
+            $result=['restored'=>0,'unique_users'=>0,'received'=>count($items),'saved'=>0,'created'=>0,'updated'=>0,'skipped'=>0,'unlinked'=>0,'reasons'=>[]];$initialHash=null;$seenUsers=[];
             foreach($items as $raw){
                 $item=HemisPayload::employee($raw);
                 $id=self::id($item['id']??null);$name=$item['full_name']??'';
@@ -111,7 +112,11 @@ class Hemis
                 $department=self::id($item['department']??$item['_department']??$item['department_id']??null);$org=$department?(new Query())->from('org')->where(['hemis_id'=>$department])->one():null;
                 $user=User::findOne(['hemis_id'=>$id]);$new=!$user;
                 if($org && Organization::blockedBy((int)$org['id']) && (!$user || (int)$user->org_id!==(int)$org['id'])){$org=null;$result['reasons']['Bo‘lim bloklangan']=($result['reasons']['Bo‘lim bloklangan']??0)+1;}
-                if($user && $user->deleted_at){$result['skipped']++;$result['reasons']['Superadministrator o‘chirgan hisob']=($result['reasons']['Superadministrator o‘chirgan hisob']??0)+1;continue;}
+                if($user && $user->deleted_at){
+                    if(!$restoreDeleted){$result['skipped']++;$result['reasons']['Superadministrator o‘chirgan hisob']=($result['reasons']['Superadministrator o‘chirgan hisob']??0)+1;continue;}
+                    $user->deleted_at=null;$user->active=0;$user->must_change_password=1;$user->auth_key=Yii::$app->security->generateRandomString(32);$result['restored']++;
+                    Catalog::audit((int)$actor->id,'hemis_user_restore','User #'.$user->id.' restored inactive; existing ID, password, category and role preserved.');
+                }
                 if($new){$user=new User();$user->username='hemis_'.$id;if(User::findOne(['username'=>$user->username])){$result['skipped']++;$result['reasons']['Login band, HEMIS ID bilan bog‘lang']=($result['reasons']['Login band, HEMIS ID bilan bog‘lang']??0)+1;continue;}$user->role='unassigned';$user->active=0;$user->must_change_password=1;$user->created_at=time();
                     // All imported accounts are inactive. Generate one unknown password hash per batch,
                     // rather than hundreds of expensive hashes that can exhaust a web request timeout.
@@ -131,7 +136,7 @@ class Hemis
                     'email'=>self::text($item['email']??null),
                 ];
                 $user->hemis_profile=json_encode($profile,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
-                $user->save(false);$result['saved']++;$result[$new?'created':'updated']++;
+                $user->save(false);$result['saved']++;$result[$new?'created':'updated']++;if(!isset($seenUsers[$id])){$seenUsers[$id]=true;$result['unique_users']++;}
             }
             return $result;
         });
