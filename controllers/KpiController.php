@@ -71,6 +71,13 @@ class KpiController extends BaseController
         $path=Yii::getAlias('@runtime/evidence/').$file['storage_name'];if(!is_file($path))throw new \yii\web\NotFoundHttpException('Fayl mavjud emas.');
         return Yii::$app->response->sendFile($path,$file['name'],['mimeType'=>$file['mime'],'inline'=>false]);
     }
+    public function actionEmployeePhoto(int $id)
+    {
+        if(!$this->actor()->isAdmin() && $id!==(int)$this->actor()->id)throw new \yii\web\NotFoundHttpException();
+        $person=\app\models\User::findOne(['id'=>$id,'deleted_at'=>null]);if(!$person)throw new \yii\web\NotFoundHttpException();
+        try{$path=\app\services\HemisPhoto::file($person);}catch(\Throwable $e){throw new \yii\web\NotFoundHttpException('Rasm yo‘q.');}
+        return Yii::$app->response->sendFile($path,'employee-photo',['mimeType'=>(new \finfo(FILEINFO_MIME_TYPE))->file($path),'inline'=>true]);
+    }
     public function actionCriteria()
     {
         $category=(string)Yii::$app->request->get('category',$this->actor()->category?:'DSC');$period=(int)Yii::$app->request->get('period',0);

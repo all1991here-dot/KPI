@@ -5,6 +5,7 @@ import shutil, time, re
 ROOT=Path(__file__).resolve().parents[1];out=ROOT/'docs/organization';out.mkdir(exist_ok=True)
 base='http://127.0.0.1:8001/'
 password='OnlyForIsolated-HttpTests2026!'
+run_id=str(time.time_ns())
 with sync_playwright() as p:
     browser=p.chromium.launch(executable_path=shutil.which('chromium'),headless=True,args=['--no-sandbox'])
     context=browser.new_context(viewport={'width':1440,'height':1050})
@@ -15,12 +16,12 @@ with sync_playwright() as p:
     def login(name):
         goto('auth/login');page.locator('[name=username]').fill('http_'+name);page.locator('[name=password]').fill(password);page.locator('.login-card button.button').click();page.wait_for_load_state('networkidle')
     login('admin');goto('admin/structure-edit&kind=university')
-    page.locator('[name=name]').fill('Browser University');page.get_by_role('button',name='Saqlash',exact=True).click();page.wait_for_load_state('networkidle')
+    page.locator('[name=name]').fill(('Browser University '+run_id));page.get_by_role('button',name='Saqlash',exact=True).click();page.wait_for_load_state('networkidle')
     uni=re.search(r'id=(\d+)',page.url).group(1)
-    goto('admin/structure-edit&kind=faculty');page.locator('[name=name]').fill('Browser Faculty');page.locator('[name=parent_id]').select_option(uni);page.get_by_role('button',name='Saqlash',exact=True).click();page.wait_for_load_state('networkidle')
+    goto('admin/structure-edit&kind=faculty');page.locator('[name=name]').fill(('Browser Faculty '+run_id));page.locator('[name=parent_id]').select_option(uni);page.get_by_role('button',name='Saqlash',exact=True).click();page.wait_for_load_state('networkidle')
     faculty=re.search(r'id=(\d+)',page.url).group(1)
-    goto('admin/structure-edit&kind=department');page.locator('[name=name]').fill('Browser Department');page.locator('[name=parent_id]').select_option(faculty);page.get_by_role('button',name='Saqlash',exact=True).click();page.wait_for_load_state('networkidle')
-    goto('admin/structure');assert 'Browser Faculty' in page.locator('#departments').inner_text()
+    goto('admin/structure-edit&kind=department');page.locator('[name=name]').fill(('Browser Department '+run_id));page.locator('[name=parent_id]').select_option(faculty);page.get_by_role('button',name='Saqlash',exact=True).click();page.wait_for_load_state('networkidle')
+    goto('admin/structure');assert ('Browser Faculty '+run_id) in page.locator('#departments').inner_text()
     page.screenshot(path=str(out/'structure.png'),full_page=True)
     goto('admin/users')
     row=page.locator('tr[data-username="http_teacher"]')
@@ -28,7 +29,7 @@ with sync_playwright() as p:
     page.goto(base+teacher_link,wait_until='networkidle')
     page.locator('[data-org-level=university]').select_option(uni)
     page.locator('[data-org-level=faculty]').select_option(faculty)
-    dept=page.locator('[data-org-level=department] option',has_text='Browser Department').get_attribute('value')
+    dept=page.locator('[data-org-level=department] option',has_text=('Browser Department '+run_id)).get_attribute('value')
     page.locator('[data-org-level=department]').select_option(dept)
     assert page.locator('[name=org_id]').input_value()==dept
     page.get_by_role('button',name='Saqlash',exact=True).click();page.wait_for_load_state('networkidle')
@@ -40,7 +41,7 @@ with sync_playwright() as p:
     assert image.evaluate('(e)=>e.complete && e.naturalWidth>0')
     assert page.locator('[name="profile[email]"]').input_value()=='teacher@example.test'
     page.screenshot(path=str(out/'employee-profile.png'),full_page=True)
-    image.evaluate('(e)=>e.dispatchEvent(new Event("error"))');assert image.is_hidden()
+    image.evaluate('(e)=>{e.dispatchEvent(new Event("error"));e.dispatchEvent(new Event("error"));}');assert image.is_hidden()
     assert page.get_by_text('Rasm yo‘q').count()
     goto('auth/logout') if False else None
     context.clear_cookies();login('operator');page.goto(base+teacher_link,wait_until='networkidle')

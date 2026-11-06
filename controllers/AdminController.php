@@ -169,12 +169,12 @@ class AdminController extends BaseController
             if($op==='configure'){\app\services\Hemis::configure((string)Yii::$app->request->post('host'),(string)Yii::$app->request->post('token'));$message='HEMIS sozlamalari saqlandi.';}
             elseif($op==='test'){ $items=\app\services\Hemis::fetch('structure');$message='HEMIS ulanishi ishladi. Tuzilma yozuvlari: '.count($items); }
             elseif(in_array($op,['structure','employees'],true)){
-                $items=\app\services\Hemis::fetch($op);$result=$op==='structure'?\app\services\Hemis::applyStructure($items,(int)Yii::$app->request->post('university_id')?:null):\app\services\Hemis::applyEmployees($items,Yii::$app->request->post('restore_deleted')==='1',$this->actor());
+                $items=\app\services\Hemis::fetch($op);$result=$op==='structure'?\app\services\Hemis::applyStructure($items,(int)Yii::$app->request->post('university_id')?:null):\app\services\Hemis::applyEmployees($items,true,$this->actor());
                 if($op==='employees'){$result['finished_at']=date('Y-m-d H:i:s');file_put_contents(Yii::getAlias('@runtime/hemis-import-last.json'),json_encode($result,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),LOCK_EX);}
                 if($op==='structure'){$message='Tuzilma importi: '.$result['faculties'].' fakultet, '.$result['departments'].' kafedra, '.$result['units'].' bo‘lim. Turi tuzatilgan: '.$result['reclassified'].'. Tekshirish kerak: '.$result['needs_review'].'. ';}else $message='';
                 $message.='Import: '.$result['saved'].' saqlandi, '.$result['skipped'].' o‘tkazildi.'.(!empty($result['unlinked'])?' Bolimga biriktirilmagan: '.$result['unlinked'].'. Avval tuzilmani import qiling, keyin xodimlarni qayta yuklang.':'');
             }else throw new DomainException('Amal noma’lum.');
-            if($op==='employees'){$message.=' Qayta tiklandi: '.$result['restored'].'. Ro‘yxatga yozilgan xodimlar: '.$result['unique_users'].'.';if(!empty($result['reasons']['Superadministrator o‘chirgan hisob']))$message.=' Tiklash uchun “O‘chirilgan HEMIS hisoblarini qayta tiklash” belgisini tanlab qayta import qiling.';}
+            if($op==='employees'){$message.=' Faollashtirildi: '.($result['activated']??0).'. Qayta tiklandi: '.$result['restored'].'. Ro‘yxatga yozilgan xodimlar: '.$result['unique_users'].'.';if(!empty($result['reasons']['Superadministrator o‘chirgan hisob']))$message.=' Xodimlarni superadministrator hisobida qayta import qiling.';}
             if(in_array($op,['structure','employees'],true) && !empty($result['reasons'])){foreach($result['reasons'] as $reason=>$count)$message.=' '.$reason.': '.$count.'.';}
             Catalog::audit((int)$this->actor()->id,'hemis_'.$op,$message);Yii::$app->session->setFlash($op==='employees' && (empty($result['saved']) || !empty($result['skipped']))?'warning':'success',$message);return $this->refresh();
         }catch(\Throwable $e){$this->message($e);}}

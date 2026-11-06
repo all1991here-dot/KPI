@@ -62,7 +62,7 @@ try{
  $r['calc_type']='XirshIndeksi';$r['base_score']=1;check(ScoreCalculator::calculate($r,1,null,0,0,7)===700,'H index configured rule');denied(fn()=>ScoreCalculator::calculate($r,1,null,0,0,1.5),'H index integer only');
  $structure=[['id'=>100,'name'=>'Imported Faculty','structureType'=>['code'=>'12','name'=>'Fakultet']],['id'=>101,'name'=>'Imported Department','parent'=>100,'structureType'=>['code'=>'13','name'=>'Kafedra']]];
  check(Hemis::applyStructure($structure)['saved']===2,'HEMIS structure fixture');check(Hemis::applyStructure($structure)['saved']===2,'HEMIS structure idempotent');check((int)(new Query())->from('org')->where(['hemis_id'=>'101'])->count()===1,'no duplicate imported org');
- $employees=[['id'=>501,'full_name'=>'Import Test','department'=>['id'=>101]]];check(Hemis::applyEmployees($employees)['saved']===1,'HEMIS employee fixture');Hemis::applyEmployees($employees);$imported=User::findOne(['hemis_id'=>'501']);check(!$imported->active,'imported accounts inactive by default');check((int)User::find()->where(['hemis_id'=>'501'])->count()===1,'no duplicate imported employee');
+ $employees=[['id'=>501,'full_name'=>'Import Test','department'=>['id'=>101]]];check(Hemis::applyEmployees($employees)['saved']===1,'HEMIS employee fixture');Hemis::applyEmployees($employees);$imported=User::findOne(['hemis_id'=>'501']);check((bool)$imported->active && $imported->role==='teacher','imported accounts active as teachers by default');check((int)User::find()->where(['hemis_id'=>'501'])->count()===1,'no duplicate imported employee');
  $snapshot=Workflow::application($id)['rule_snapshot'];Yii::$app->db->createCommand()->update('period_rule',['base_score'=>999,'revision'=>2],['period_id'=>$period,'indicator_id'=>$patent['id']])->execute();check(Workflow::application($id)['rule_snapshot']===$snapshot && (int)Workflow::application($id)['score_cents']===500,'approved snapshot remains immutable');
 
  $exclusiveRule=(new Query())->from('period_rule')->where(['period_id'=>$period,'indicator_id'=>$cap['id']])->one();
@@ -94,7 +94,7 @@ try{
  $labels=\app\services\Organization::labels((new Query())->from('org')->all());check($labels[$dep]==='Manual University → Manual Faculty → Manual Department','complete assignment path');
  denied(fn()=>Hemis::applyStructure($structure),'multiple universities require explicit selection');
  check(Hemis::applyStructure($structure,$root)['saved']===2,'HEMIS imports into selected manual university');
- check($imported->role==='unassigned','HEMIS cannot grant a role');
+ check($imported->role==='teacher','HEMIS grants teacher role without administrator privileges');
  $imported->role='head';$imported->active=1;$imported->category='PHD';$imported->save(false);$passwordHash=$imported->password_hash;
  Hemis::applyEmployees([['id'=>501,'full_name'=>'Complete Employee','_department'=>['id'=>101],'academicDegree'=>['name'=>'PhD'],'academicRank'=>['name'=>'Dotsent'],'staffPosition'=>['name'=>'Professor'],'employmentForm'=>['name'=>'Asosiy'],'employmentStaff'=>['name'=>'1.0'],'phone'=>'+998000000000','email'=>'test@example.test','image'=>'/static/test.jpg']]);
  $updated=User::findOne($imported->id);$profile=json_decode($updated->hemis_profile,true);
@@ -123,7 +123,7 @@ try{
  denied(fn()=>\app\services\Management::deleteOrganization($admin,$root),'cannot delete university containing faculties');
  $emptyOrg=\app\services\Organization::save('Delete fixture','university',null);\app\services\Management::deleteOrganization($admin,$emptyOrg);check(!(new Query())->from('org')->where(['id'=>$emptyOrg])->exists(),'superadmin deletes empty organization');
  $deleted=user('deleted_employee','teacher',$dep);$deleted->hemis_id='777';$deleted->save(false);\app\services\Management::deleteUser($admin,(int)$deleted->id);check(User::findIdentity($deleted->id)===null,'deleted employee cannot authenticate');
- $report=Hemis::applyEmployees([['id'=>777,'full_name'=>'Do not restore']]);check($report['saved']===0 && $report['skipped']===1,'HEMIS does not recreate deleted employee');
+ $report=Hemis::applyEmployees([['id'=>777,'full_name'=>'Do not restore']],false);check($report['saved']===0 && $report['skipped']===1,'HEMIS does not recreate deleted employee');
  $criterion=['code'=>'CUSTOM-DELETE-TEST','name'=>'Custom test criterion','section'=>'CUSTOM','section_name'=>'Custom direction','criterion_code'=>'CUSTOM-1','criterion_name'=>'Custom condition','category'=>'PHD','calc_type'=>'BirlikUchun','base_score'=>'2','policy_required'=>1];
  $custom=\app\services\Management::saveIndicator($admin,$criterion);check((new Query())->from('indicator')->where(['id'=>$custom])->exists(),'superadmin creates criterion');
  \app\services\Management::saveIndicator($admin,array_merge($criterion,['name'=>'Edited test criterion']),$custom);check((new Query())->from('indicator')->where(['id'=>$custom])->one()['name']==='Edited test criterion','superadmin edits criterion');
@@ -138,7 +138,7 @@ try{
 
  try{Hemis::applyEmployees([['id'=>88000,'full_name'=>'Restored teacher']],true,$ordinaryAdmin);throw new RuntimeException('Expected restore restriction');}catch(\yii\web\ForbiddenHttpException $e){check(true,'ordinary admin cannot restore deleted HEMIS accounts');}
  $restored=Hemis::applyEmployees([['id'=>88000,'full_name'=>'Restored teacher'],['id'=>88000,'full_name'=>'Restored teacher']],true,$admin);$restoredTeacher=User::findOne($teacher->id);
- check($restored['restored']===1 && $restored['unique_users']===1 && $restoredTeacher->deleted_at===null && !$restoredTeacher->active,'explicit HEMIS recovery restores one inactive account per ID');
+ check($restored['restored']===1 && $restored['unique_users']===1 && $restoredTeacher->deleted_at===null && $restoredTeacher->active && $restoredTeacher->role==='teacher','HEMIS recovery restores one active teacher account per ID');
  check($restoredTeacher->password_hash===$originalPassword && $restoredTeacher->role==='teacher' && (int)(new Query())->from('application')->where(['employee_id'=>$teacher->id])->count()===$historyCount,'HEMIS recovery preserves password, role, employee ID and existing documents');
  $blockRoot=\app\services\Organization::save('Block University','university',null);$blockFaculty=\app\services\Organization::save('Block Faculty','faculty',$blockRoot);$blockDepartment=\app\services\Organization::save('Block Department','department',$blockFaculty);
  $blockTeacher=user('blocked_teacher','teacher',$blockDepartment);

@@ -97,14 +97,18 @@ class Hemis
             return $result;
         });
     }
-    public static function applyEmployees(array $items,bool $restoreDeleted=false,?User $actor=null): array
+    public static function applyEmployees(array $items,bool $restoreDeleted=true,?User $actor=null): array
     {
-        if($restoreDeleted && (!$actor || $actor->role!=='superadmin'))throw new \yii\web\ForbiddenHttpException('O‘chirilgan HEMIS hisoblarini faqat superadministrator tiklaydi.');
+        if($actor && $actor->role!=='superadmin')throw new \yii\web\ForbiddenHttpException('O‘chirilgan HEMIS hisoblarini faqat superadministrator tiklaydi.');
         $schema=Yii::$app->db->schema->getTableSchema('user',true);
         if(!isset($schema->columns['hemis_profile'],$schema->columns['deleted_at']))throw new DomainException('Xodim profili bazasi yangilanmagan. KPI qora oynasini yoping va start-native.bat bilan qayta oching; migratsiya bajarilishini kuting.');
         if(!$items)throw new DomainException('HEMIS 0 ta xodim qaytardi. API backend domeni va employee-list ruxsatini tekshiring. Mavjud hisoblar o‘zgarmadi.');
         return Yii::$app->db->transaction(function()use($items,$restoreDeleted,$actor){
-            $result=['restored'=>0,'unique_users'=>0,'received'=>count($items),'saved'=>0,'created'=>0,'updated'=>0,'skipped'=>0,'unlinked'=>0,'reasons'=>[]];$initialHash=null;$seenUsers=[];
+            $result=['restored'=>0,'unique_users'=>0,'received'=>count($items),'saved'=>0,'created'=>0,'updated'=>0,'skipped'=>0,'unlinked'=>0,'reasons'=>[]];$initialHash=null;$seenUsers=[];$accountEvents=[];
+            foreach((new Query())->select(['action','details'])->from('audit')->where(['action'=>['user_block','user_unblock','hemis_user_restore','user_save']])->orderBy('id')->all() as $event){
+                $eventId=null;if(preg_match('/^User #(\d+)(?: |$)/',$event['details'],$match))$eventId=$match[1];elseif($event['action']==='user_save')$eventId=json_decode($event['details'],true)['user_id']??null;
+                if($eventId)$accountEvents[$eventId]=$event['action'];
+            }
             foreach($items as $raw){
                 $item=HemisPayload::employee($raw);
                 $id=self::id($item['id']??null);$name=$item['full_name']??'';
@@ -114,20 +118,26 @@ class Hemis
                 if($org && Organization::blockedBy((int)$org['id']) && (!$user || (int)$user->org_id!==(int)$org['id'])){$org=null;$result['reasons']['Bo‘lim bloklangan']=($result['reasons']['Bo‘lim bloklangan']??0)+1;}
                 if($user && $user->deleted_at){
                     if(!$restoreDeleted){$result['skipped']++;$result['reasons']['Superadministrator o‘chirgan hisob']=($result['reasons']['Superadministrator o‘chirgan hisob']??0)+1;continue;}
-                    $user->deleted_at=null;$user->active=0;$user->must_change_password=1;$user->auth_key=Yii::$app->security->generateRandomString(32);$result['restored']++;
-                    Catalog::audit((int)$actor->id,'hemis_user_restore','User #'.$user->id.' restored inactive; existing ID, password, category and role preserved.');
+                    if(!$actor || $actor->role!=='superadmin')throw new \yii\web\ForbiddenHttpException('Tiklash uchun superadministrator huquqi kerak.');
+                    $previousRole=$user->role;$user->deleted_at=null;$user->active=1;$user->role='teacher';$user->must_change_password=1;$user->auth_key=Yii::$app->security->generateRandomString(32);$result['restored']++;
+                    Catalog::audit((int)$actor->id,'hemis_user_restore','User #'.$user->id.' restored active as teacher; previous role: '.$previousRole.'; ID, password and documents preserved.');
                 }
-                if($new){$user=new User();$user->username='hemis_'.$id;if(User::findOne(['username'=>$user->username])){$result['skipped']++;$result['reasons']['Login band, HEMIS ID bilan bog‘lang']=($result['reasons']['Login band, HEMIS ID bilan bog‘lang']??0)+1;continue;}$user->role='unassigned';$user->active=0;$user->must_change_password=1;$user->created_at=time();
-                    // All imported accounts are inactive. Generate one unknown password hash per batch,
+                if($new){$user=new User();$user->username='hemis_'.$id;if(User::findOne(['username'=>$user->username])){$result['skipped']++;$result['reasons']['Login band, HEMIS ID bilan bog‘lang']=($result['reasons']['Login band, HEMIS ID bilan bog‘lang']??0)+1;continue;}$user->role='teacher';$user->active=1;$user->must_change_password=1;$user->created_at=time();
+                    // Generate an unknown password hash per batch; a temporary password is set by an administrator,
                     // rather than hundreds of expensive hashes that can exhaust a web request timeout.
                     $initialHash??=Yii::$app->security->generatePasswordHash(Yii::$app->security->generateRandomString(64));$user->password_hash=$initialHash;$user->auth_key=Yii::$app->security->generateRandomString(32);$user->hemis_id=$id;}
 
+                $event=$new?null:($accountEvents[$user->id]??null);
+                if(!$new && !$user->active && $user->must_change_password && !in_array($event,['user_block','user_save','user_unblock'],true) && ($user->role==='unassigned' || $event==='hemis_user_restore' || ($user->role==='teacher' && $event===null))){
+                    if($actor && $actor->role==='superadmin'){$previousRole=$user->role;$user->active=1;$user->role='teacher';$user->auth_key=Yii::$app->security->generateRandomString(32);Catalog::audit((int)$actor->id,'hemis_user_activate','User #'.$user->id.' active as teacher; previous role: '.$previousRole);$result['activated']=($result['activated']??0)+1;}
+                }
+                $oldProfile=json_decode($user->hemis_profile??'{}',true)?:[];
                 $user->name=mb_substr($name,0,200);$user->org_id=$org?$org['id']:null;
                 $result['unlinked']=($result['unlinked']??0)+($org?0:1);
                 $user->degree=self::text($item['academicDegree']??$item['academic_degree']??null,50);
                 $user->position=self::text($item['staffPosition']??$item['position']??$item['employeeType']??null,100);
                 $profile=[
-                    'photo_url'=>EmployeePhoto::fromItem($item),
+                    'photo_url'=>EmployeePhoto::fromItem($item)??EmployeePhoto::url($oldProfile['photo_url']??null),
                     'academic_rank'=>self::text($item['academicRank']??$item['academic_rank']??null),
                     'employment_form'=>self::text($item['employmentForm']??$item['employment_form']??null),
                     'employment_staff'=>self::text($item['employmentStaff']??$item['employment_staff']??$item['rate']??null),
