@@ -1,4 +1,10 @@
-<?php use yii\helpers\Html;use app\services\Ui;$this->title='Kirish · FarDU KPI';$hasPhoto=is_file(Yii::getAlias('@app/web/images/fardu-campus.jpg')); ?>
+<?php use yii\helpers\Html;use app\services\Ui;$this->title='Kirish · FarDU KPI';$hasPhoto=is_file(Yii::getAlias('@app/web/images/fardu-campus.jpg'));
+$this->registerCssFile(Yii::$app->request->baseUrl.'/css/login-animation.css?v=1');
+$this->registerJsFile(Yii::$app->request->baseUrl.'/js/login-animation.js?v=1');
+?>
+<div class="login-network-background" aria-hidden="true"><canvas data-login-network></canvas><div class="login-network-halo"></div></div>
+<div class="fardu-login-scene">
+<?= $this->render('_robot') ?>
 <section class="fardu-login-card">
 <div class="fardu-photo-panel<?= $hasPhoto?' has-campus-photo':'' ?>">
 <?php if($hasPhoto): ?><img class="fardu-campus-photo" src="<?= Ui::h(Yii::$app->request->baseUrl) ?>/images/fardu-campus.jpg?v=3" alt="Farg‘ona davlat universiteti binosi"><?php endif ?>
@@ -11,4 +17,5 @@
 <?= Ui::input('Parol','password','','password',['required'=>true,'autocomplete'=>'current-password','maxlength'=>128,'placeholder'=>'Parolingizni kiriting']) ?>
 <button class="button full" type="submit">Tizimga kirish <?= Ui::icon('arrow') ?></button><?= Html::endForm() ?>
 <p class="login-help">Hisob yoki parol bo‘yicha KPI administratoriga murojaat qiling.</p></div></div></section>
+</div>
 <div class="login-footer">© <?= date('Y') ?> FarDU · KPI baholash tizimi</div>
