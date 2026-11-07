@@ -27,7 +27,7 @@ class Management
         if($id===(int)$actor->id)throw new DomainException('O‘z hisobingizni o‘chira olmaysiz.');
         Yii::$app->db->transaction(function()use($actor,$id){
             $user=User::findOne($id);if(!$user || $user->deleted_at)throw new DomainException('Xodim topilmadi.');
-            Catalog::audit((int)$actor->id,'user_delete',json_encode(['id'=>$id,'name'=>$user->name,'role'=>$user->role,'org_id'=>$user->org_id,'hemis_id'=>$user->hemis_id],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR));
+            Catalog::audit((int)$actor->id,'user_delete',json_encode(['user_id'=>$id,'before'=>Audit::userData($user),'result'=>'Hisob o‘chirildi, hujjatlar saqlandi'],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR));
             $user->active=0;$user->deleted_at=time();$user->org_id=null;$user->auth_key=Yii::$app->security->generateRandomString();$user->save(false);
         });
     }
@@ -38,8 +38,8 @@ class Management
             $target=User::findOne(['id'=>$id,'deleted_at'=>null]);if(!$target)throw new DomainException('Hisob topilmadi.');
             if($actor->role!=='superadmin' && $target->isAdmin())throw new \yii\web\ForbiddenHttpException('Administrator hisobini faqat superadministrator boshqaradi.');
             if(!$active && $id===(int)$actor->id)throw new DomainException('O‘z hisobingizni bloklay olmaysiz.');
-            $target->active=$active?1:0;$target->auth_key=Yii::$app->security->generateRandomString();$target->save(false);
-            Catalog::audit((int)$actor->id,$active?'user_unblock':'user_block','User #'.$id);
+            $before=Audit::userData($target);$target->active=$active?1:0;$target->auth_key=Yii::$app->security->generateRandomString();$target->save(false);
+            Catalog::audit((int)$actor->id,$active?'user_unblock':'user_block',json_encode(['user_id'=>$id,'before'=>$before,'after'=>Audit::userData($target),'sessions_revoked'=>true],JSON_UNESCAPED_UNICODE));
         });
     }
     public static function bulkPreview(User $actor,string $scope): array

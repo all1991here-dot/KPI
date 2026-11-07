@@ -68,6 +68,7 @@ class KpiController extends BaseController
     {
         $file=(new Query())->from('evidence')->where(['id'=>$id])->one();if(!$file || !Access::canView($this->actor(),Workflow::application((int)$file['application_id'])))throw new \yii\web\NotFoundHttpException('Dalil topilmadi.');
         $path=Yii::getAlias('@runtime/evidence/').$file['storage_name'];if(!is_file($path))throw new \yii\web\NotFoundHttpException('Fayl mavjud emas.');
+        Catalog::audit((int)$this->actor()->id,'evidence_download',json_encode(['application_id'=>$file['application_id'],'evidence_id'=>$id,'name'=>$file['name'],'mime'=>$file['mime'],'size'=>$file['size'],'sha256'=>$file['sha256']],JSON_UNESCAPED_UNICODE));
         return Yii::$app->response->sendFile($path,$file['name'],['mimeType'=>$file['mime'],'inline'=>false]);
     }
     public function actionEmployeePhoto(int $id)
@@ -119,6 +120,7 @@ class KpiController extends BaseController
         $rows=$q->orderBy(['score_cents'=>SORT_DESC,'employee'=>SORT_ASC])->all();
         if($group==='university' && isset($rows[0]) && !(int)$rows[0]['applications'])$rows=[];
         if(in_array($request->get('format'),['csv','xlsx'],true)){
+            Catalog::audit((int)$this->actor()->id,'report_export',json_encode(['format'=>$request->get('format'),'group'=>$group,'period'=>$request->get('period'),'rows'=>count($rows)],JSON_UNESCAPED_UNICODE));
             $table=[[$personal?'№':'O‘rin',$personal?'Xodim':'Xodim / bo‘lim','Toifa','Yuqori bo‘lim','Ball','Tasdiqlangan arizalar']];foreach($rows as $i=>$row)$table[]=[$i+1,$row['employee']??'Belgilanmagan',Catalog::CATEGORIES[$row['category']]??$row['category'],$row['org']??'',number_format($row['score_cents']/100,2,'.',''),$row['applications']];
             return \app\services\Export::download($table,(string)$request->get('format'));
         }

@@ -61,8 +61,9 @@ class Workflow
                     $storage=Yii::$app->security->generateRandomString(40).'.'.$ext;$path=$dir.'/'.$storage;
                     if(!$file->saveAs($path))throw new DomainException('Dalilni saqlab bo‘lmadi.');$paths[]=$path;chmod($path,0600);
                     Yii::$app->db->createCommand()->insert('evidence',['application_id'=>$id,'name'=>mb_substr(basename(str_replace('\\','/',$file->name)),0,250),'storage_name'=>$storage,'mime'=>$mime,'size'=>filesize($path),'sha256'=>hash_file('sha256',$path)])->execute();
+                    $evidenceId=(int)Yii::$app->db->lastInsertID;Catalog::audit((int)$actor->id,'evidence_upload',json_encode((new Query())->select(['id','application_id','name','mime','size','sha256'])->from('evidence')->where(['id'=>$evidenceId])->one(),JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR));
                 }
-                self::history($id,$actor,'save','Qoralama saqlandi.',0);return $id;
+                self::history($id,$actor,'save','Qoralama saqlandi.',0,$old);return $id;
             });
         }catch(\Throwable $e){foreach($paths as $path)@unlink($path);throw $e;}
     }
@@ -71,13 +72,13 @@ class Workflow
         $file=(new Query())->from('evidence')->where(['id'=>$id])->one();if(!$file)throw new DomainException('Dalil topilmadi.');
         $app=self::application((int)$file['application_id']);
         if (!$actor->isAdmin() && ((int)$app['employee_id']!==(int)$actor->id || !in_array($app['status'],['draft','returned'],true)))throw new DomainException('Dalilni o‘chirishga ruxsat yo‘q.');
-        Yii::$app->db->transaction(function()use($actor,$id,$file,$app){self::lockPeriod((int)$app['period_id']);$fresh=self::application((int)$app['id']);if($fresh['status']==='approved' && $actor->role!=='superadmin')throw new DomainException('Tasdiqlangan ariza dalilini faqat superadministrator o‘zgartirishi mumkin.');if(!$actor->isAdmin() && !in_array($fresh['status'],['draft','returned'],true))throw new DomainException('Ariza holati o‘zgardi.');if($actor->isAdmin()){$balance=(int)(new Query())->from('score_entry')->where(['application_id'=>$app['id']])->sum('amount_cents');if($balance)self::ledger((int)$app['id'],$actor,-$balance,'Dalil administrator tomonidan tahrirlandi.');Yii::$app->db->createCommand()->update('application',['status'=>'draft','step'=>0,'score_cents'=>0,'expert_score'=>null,'rule_snapshot'=>null,'route_snapshot'=>null,'updated_at'=>time()],['id'=>$app['id']])->execute();}Yii::$app->db->createCommand()->delete('evidence',['id'=>$id])->execute();self::history((int)$app['id'],$actor,'remove_evidence','Dalil olib tashlandi.',0);});
+        Yii::$app->db->transaction(function()use($actor,$id,$file,$app){self::lockPeriod((int)$app['period_id']);$fresh=self::application((int)$app['id']);if($fresh['status']==='approved' && $actor->role!=='superadmin')throw new DomainException('Tasdiqlangan ariza dalilini faqat superadministrator o‘zgartirishi mumkin.');if(!$actor->isAdmin() && !in_array($fresh['status'],['draft','returned'],true))throw new DomainException('Ariza holati o‘zgardi.');if($actor->isAdmin()){$balance=(int)(new Query())->from('score_entry')->where(['application_id'=>$app['id']])->sum('amount_cents');if($balance)self::ledger((int)$app['id'],$actor,-$balance,'Dalil administrator tomonidan tahrirlandi.');Yii::$app->db->createCommand()->update('application',['status'=>'draft','step'=>0,'score_cents'=>0,'expert_score'=>null,'rule_snapshot'=>null,'route_snapshot'=>null,'updated_at'=>time()],['id'=>$app['id']])->execute();}Catalog::audit((int)$actor->id,'evidence_delete',json_encode(array_diff_key($file,['storage_name'=>true]),JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR));Yii::$app->db->createCommand()->delete('evidence',['id'=>$id])->execute();self::history((int)$app['id'],$actor,'remove_evidence','Dalil olib tashlandi.',0);});
         @unlink(Yii::getAlias('@runtime/evidence/').$file['storage_name']);
     }
     public static function act(User $actor,int $id,string $action,string $reason='', $expert=null): void
     {
         Yii::$app->db->transaction(function()use($actor,$id,$action,$reason,$expert){
-            $app=self::application($id);self::lockPeriod((int)$app['period_id']);$app=self::application($id);
+            $app=self::application($id);self::lockPeriod((int)$app['period_id']);$app=self::application($id);$before=$app;
             $period=(new Query())->from('period')->where(['id'=>$app['period_id']])->one();
             if($period['closed'])throw new DomainException('Baholash davri yopilgan.');
             $reason=trim($reason);if(mb_strlen($reason)>2000)throw new DomainException('Izoh 2000 belgidan oshmasin.');
@@ -138,7 +139,7 @@ class Workflow
             }
             $values=array_intersect_key($app,array_flip(['status','step','score_cents','rule_snapshot','route_snapshot','expert_score']));$values['updated_at']=time();
             Yii::$app->db->createCommand()->update('application',$values,['id'=>$id])->execute();
-            self::history($id,$actor,$action,$reason?:'Ariza yuborildi.',(int)$app['step']);
+            self::history($id,$actor,$action,$reason?:'Ariza yuborildi.',(int)$app['step'],$before);
         });
     }
     public static function lockPeriod(int $id): void
@@ -169,10 +170,10 @@ class Workflow
         $found=(new Query())->from(['e'=>'evidence'])->innerJoin(['a'=>'application'],'a.id=e.application_id')->where(['a.employee_id'=>$app['employee_id'],'a.period_id'=>$app['period_id'],'a.indicator_id'=>$app['indicator_id'],'a.status'=>['submitted','review','approved'],'e.sha256'=>$hashes])->andWhere(['<>','a.id',$app['id']])->exists();
         if($found)throw new DomainException('Bu dalil shu ko‘rsatkich uchun boshqa faol arizada mavjud.');
     }
-    private static function history(int $id,User $actor,string $action,string $reason,int $step): void
+    private static function history(int $id,User $actor,string $action,string $reason,int $step,?array $before=null): void
     {
         Yii::$app->db->createCommand()->insert('review',['application_id'=>$id,'actor_id'=>$actor->id,'action'=>$action,'step'=>$step,'reason'=>$reason,'created_at'=>time(),'visible_in_history'=>$actor->role==='superadmin'?0:1])->execute();
-        if($actor->role==='superadmin')Catalog::audit((int)$actor->id,'application_superadmin_'.$action,json_encode(['application_id'=>$id,'step'=>$step,'reason'=>$reason,'state'=>self::application($id)],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR));
+        Catalog::audit((int)$actor->id,($actor->role==='superadmin'?'application_superadmin_':'application_').$action,json_encode(['application_id'=>$id,'step'=>$step,'reason'=>$reason,'before'=>$before,'state'=>self::application($id),'evidence'=>(new Query())->select(['id','name','mime','size','sha256'])->from('evidence')->where(['application_id'=>$id])->all()],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR));
     }
     private static function ledger(int $id,User $actor,int $amount,string $reason): void
     {

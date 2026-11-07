@@ -7,8 +7,8 @@ $personal=$user && $user->role==='teacher';
 $route=$this->context->route;
 $mine=(bool)Yii::$app->request->get('mine');$queue=(bool)Yii::$app->request->get('queue');$appeals=(bool)Yii::$app->request->get('appeals');$isApplications=$route==='kpi/applications';
 $navigation=[['kpi/index',$personal?'Shaxsiy panel':'Boshqaruv paneli','grid'],['kpi/create','Yangi faoliyat','plus'],['kpi/criteria',$personal?'Mening mezonlarim':'KPI mezonlari','book'],['kpi/reports',$personal?'Mening natijalarim':'Reyting va hisobot','chart'],['kpi/notifications','Bildirishnomalar','bell'],['kpi/profile','Shaxsiy profil','user']];
-$adminNavigation=[['users','Foydalanuvchilar','users'],['structure','Universitet tuzilmasi','building'],['periods','Baholash davrlari','calendar'],['rules','Hisoblash qoidalari','settings'],['route','Tasdiqlash bosqichlari','route'],['hemis','HEMIS integratsiyasi','link'],['audit','Amallar jurnali','history']];
-if($user && $user->role==='superadmin')$adminNavigation[]=['indicators','Mezonlarni boshqarish','book'];
+$adminNavigation=[['users','Foydalanuvchilar','users'],['structure','Universitet tuzilmasi','building'],['periods','Baholash davrlari','calendar'],['rules','Hisoblash qoidalari','settings'],['route','Tasdiqlash bosqichlari','route'],['hemis','HEMIS integratsiyasi','link']];
+if($user && $user->role==='superadmin'){$adminNavigation[]=['indicators','Mezonlarni boshqarish','book'];$adminNavigation[]=['audit','Amallar jurnali','history'];}
 $pageTitle=str_replace([' · KPI',' · FarDU KPI'],'',$this->title?:'Boshqaruv paneli');
 $assetVersion='3.5.0';
 ?>

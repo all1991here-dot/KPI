@@ -15,6 +15,6 @@ class BackupController extends Controller
         $zip->addFile($dbFile,'runtime/kpi.sqlite');$zip->addFile(Yii::getAlias('@app/config/local.php'),'config/local.php');
         $hemis=Yii::getAlias('@runtime/hemis.json');if(is_file($hemis))$zip->addFile($hemis,'runtime/hemis.json');
         $evidence=Yii::getAlias('@runtime/evidence');if(is_dir($evidence))foreach(new \DirectoryIterator($evidence) as $file)if($file->isFile()&&!$file->isLink())$zip->addFile($file->getPathname(),'runtime/evidence/'.$file->getFilename());
-        $zip->close();unlink($dbFile);chmod($path,0600);$this->stdout("Zaxira saqlandi: ".$path."\nMaxfiy sozlamalar bor; xavfsiz saqlang.\n");return 0;
+        $zip->close();unlink($dbFile);chmod($path,0600);\app\services\Catalog::audit(null,'backup_create',json_encode(['file'=>basename($path),'size'=>filesize($path),'contains_private_settings'=>true]));$this->stdout("Zaxira saqlandi: ".$path."\nMaxfiy sozlamalar bor; xavfsiz saqlang.\n");return 0;
     }
 }

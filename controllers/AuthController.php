@@ -23,18 +23,19 @@ class AuthController extends BaseController
             $fail=(new Query())->from('login_attempt')->where(['fingerprint'=>$fingerprint])->andWhere(['>','created_at',time()-900])->count();
             $ipFail=(new Query())->from('login_attempt')->where(['fingerprint'=>$ipFingerprint])->andWhere(['>','created_at',time()-900])->count();
             $user=User::findOne(['username'=>$username,'active'=>1,'deleted_at'=>null]);
-            if($fail>=8 || $ipFail>=50)$error='Urinishlar ko‘p. 15 daqiqadan so‘ng qayta urinib ko‘ring.';
+            if($fail>=8 || $ipFail>=50){$error='Urinishlar ko‘p. 15 daqiqadan so‘ng qayta urinib ko‘ring.';Catalog::audit(null,'login_failed',json_encode(['username'=>$username,'result'=>'Urinishlar chegarasi'],JSON_UNESCAPED_UNICODE));}
             elseif($user && Yii::$app->security->validatePassword($password,$user->password_hash)){
                 Yii::$app->db->createCommand()->delete('login_attempt',['fingerprint'=>$fingerprint])->execute();
                 Yii::$app->session->regenerateID(true);Yii::$app->user->login($user);Catalog::audit((int)$user->id,'login','Tizimga kirish');return $this->redirect(['kpi/index']);
             }else{
+                Catalog::audit($user?(int)$user->id:null,'login_failed',json_encode(['username'=>$username,'result'=>'Login yoki parol noto‘g‘ri'],JSON_UNESCAPED_UNICODE));
                 foreach([$fingerprint,$ipFingerprint] as $fp)Yii::$app->db->createCommand()->insert('login_attempt',['fingerprint'=>$fp,'created_at'=>time()])->execute();
                 Yii::$app->db->createCommand()->delete('login_attempt',['<','created_at',time()-86400])->execute();$error='Login yoki parol noto‘g‘ri.';
             }
         }
         return $this->render('login',['error'=>$error]);
     }
-    public function actionLogout(){ $this->postOnly();Yii::$app->user->logout();return $this->redirect(['auth/login']); }
+    public function actionLogout(){ $this->postOnly();Catalog::audit((int)$this->actor()->id,'logout','Tizimdan chiqish');Yii::$app->user->logout();return $this->redirect(['auth/login']); }
     public function actionPassword()
     {
         if(empty(Yii::$app->params['passwordChangeEnabled']))return $this->redirect([$this->actor()->role==='unassigned'?'kpi/profile':'kpi/index']);

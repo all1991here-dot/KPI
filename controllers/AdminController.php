@@ -26,7 +26,7 @@ class AdminController extends BaseController
     }
     public function actionUserEdit(?int $id=null)
     {
-        $edit=$id?User::findOne(['id'=>$id,'deleted_at'=>null]):null;if($id && !$edit)throw new \yii\web\NotFoundHttpException();
+        $edit=$id?User::findOne(['id'=>$id,'deleted_at'=>null]):null;$auditBefore=\app\services\Audit::userData($edit);if($id && !$edit)throw new \yii\web\NotFoundHttpException();
         if(!$edit)\app\services\Management::authorize($this->actor());
         if($edit && $this->actor()->role!=='superadmin' && $edit->isAdmin())throw new \yii\web\ForbiddenHttpException('Administrator hisobini faqat superadministrator boshqaradi.');
         if(Yii::$app->request->isPost && !$edit)\app\services\Management::authorize($this->actor());
@@ -57,7 +57,7 @@ class AdminController extends BaseController
             $user->degree=mb_substr(trim((string)($data['degree']??'')),0,50);$user->position=mb_substr(trim((string)($data['position']??'')),0,100);
             $profile=json_decode($edit?->hemis_profile??'{}',true)?:[];$incoming=Yii::$app->request->post('profile',[]);foreach(['academic_rank','employment_form','employment_staff','employee_type','phone','email'] as $key){if(!array_key_exists($key,$incoming))continue;$value=trim((string)($incoming[$key]??''));$profile[$key]=$value===''?null:mb_substr($value,0,200);}$user->hemis_profile=json_encode($profile,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
             if(!$edit)$user->created_at=time();if($password!==''){$user->setPassword($password);$user->must_change_password=1;}
-            $user->save(false);Catalog::audit((int)$this->actor()->id,'user_save',json_encode(['user_id'=>$user->id,'role_before'=>$previousRole,'role_after'=>$role,'org_id'=>$user->org_id],JSON_THROW_ON_ERROR));Yii::$app->session->setFlash('success','Foydalanuvchi saqlandi.');return $this->redirect(['user-edit','id'=>$user->id]);
+            Yii::$app->db->transaction(function()use($user,$auditBefore,$previousRole,$role,$password){if(!$user->save(false))throw new DomainException('Hisob saqlanmadi.');Catalog::audit((int)$this->actor()->id,'user_save',json_encode(['user_id'=>$user->id,'role_before'=>$previousRole,'role_after'=>$role,'before'=>$auditBefore,'after'=>\app\services\Audit::userData($user),'password_changed'=>$password!==''],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR));});Yii::$app->session->setFlash('success','Foydalanuvchi saqlandi.');return $this->redirect(['user-edit','id'=>$user->id]);
         }catch(\Throwable $e){if($e instanceof \yii\web\ForbiddenHttpException)throw $e;$this->message($e);}}
         return $this->render('user-edit',['edit'=>$edit,'orgs'=>(new Query())->from('org')->orderBy('name')->all()]);
     }
@@ -140,9 +140,10 @@ class AdminController extends BaseController
             if(!$name || mb_strlen($name)>200 || $starts>$ends)throw new DomainException('Nom va davr oralig‘ini tekshiring.');
             Yii::$app->db->transaction(function()use($id,$edit,$name,$starts,$ends){
                 if($id){Workflow::lockPeriod($id);if((new Query())->from('application')->where(['period_id'=>$id])->exists() && ($starts!==$edit['starts'] || $ends!==$edit['ends']))throw new DomainException('Arizali davr sanalarini o‘zgartirib bo‘lmaydi.');}
+                $auditBefore=$id?(new Query())->from('period')->where(['id'=>$id])->one():null;
                 $values=['name'=>$name,'starts'=>$starts,'ends'=>$ends,'closed'=>Yii::$app->request->post('closed')?1:0];$cmd=Yii::$app->db->createCommand();
                 if($id)$cmd->update('period',$values,['id'=>$id])->execute();else{$cmd->insert('period',$values)->execute();$id=(int)Yii::$app->db->lastInsertID;}
-                Catalog::createRules($id);Catalog::audit((int)$this->actor()->id,'period_save',$name);
+                Catalog::createRules($id);Catalog::audit((int)$this->actor()->id,'period_save',json_encode(['period_id'=>$id,'before'=>$auditBefore,'after'=>$values],JSON_UNESCAPED_UNICODE));
             });Yii::$app->session->setFlash('success','Davr va uning mezonlari saqlandi.');return $this->redirect(['periods']);
         }catch(\Throwable $e){$this->message($e);}}
         return $this->render('periods',['edit'=>$edit,'rows'=>(new Query())->from('period')->orderBy(['starts'=>SORT_DESC])->all()]);
@@ -167,7 +168,7 @@ class AdminController extends BaseController
             $values['formula_mode']=(string)Yii::$app->request->post('formula_mode','');
             if(in_array($type,['PulFormulasi','XirshIndeksi'],true) && $values['base_score']===null)throw new DomainException('Formula birlik balli kerak.');
             if($type==='PulFormulasi' && ((float)$values['formula_divisor']<=0 || !in_array($values['formula_mode'],['proportional','floor'],true)))throw new DomainException('100 MHTEKM miqdori va hisoblash usulini belgilang.');
-            Yii::$app->db->transaction(function()use($periodId,$editId,$values,$indicator,$decision){Workflow::lockPeriod($periodId);Yii::$app->db->createCommand()->update('period_rule',$values,['id'=>$editId])->execute();Catalog::audit((int)$this->actor()->id,'rule_update',$indicator['code'].' '.$decision.' '.json_encode($values,JSON_UNESCAPED_UNICODE));});
+            Yii::$app->db->transaction(function()use($periodId,$editId,$values,$indicator,$decision){Workflow::lockPeriod($periodId);$auditBefore=(new Query())->from('period_rule')->where(['id'=>$editId])->one();Yii::$app->db->createCommand()->update('period_rule',$values,['id'=>$editId])->execute();Catalog::audit((int)$this->actor()->id,'rule_update',json_encode(['rule_id'=>$editId,'period_id'=>$periodId,'indicator'=>$indicator['code'],'before'=>$auditBefore,'after'=>$values],JSON_UNESCAPED_UNICODE));});
             Yii::$app->session->setFlash('success','Qoida saqlandi. Avval yuborilgan arizalar o‘z qoida nusxasini saqlaydi.');return $this->redirect(['rules','period'=>$periodId,'category'=>$category]);
         }catch(\Throwable $e){$this->message($e);}}
         $q=(new Query())->select(['r.*','code'=>'i.code','name'=>'i.name','source_note'=>'i.source_note','source_text'=>'i.source_text','original_type'=>'i.calc_type'])->from(['r'=>'period_rule'])->innerJoin(['i'=>'indicator'],'i.id=r.indicator_id')->where(['r.period_id'=>$periodId,'i.category'=>$category,'i.deleted_at'=>null]);
@@ -181,7 +182,7 @@ class AdminController extends BaseController
             for($i=0;$i<5;$i++){if(trim($names[$i]??'')==='')continue;$rs=$roles[$i]??[];if(!$rs || array_diff($rs,['head','faculty','expert','admin','superadmin']))throw new DomainException('Har bosqichga tekshiruvchi rolini tanlang.');$steps[]=['position'=>count($steps)+1,'name'=>mb_substr(trim($names[$i]),0,200),'roles'=>json_encode(array_values($rs))];}
             if(!$steps)throw new DomainException('Kamida bitta bosqich kerak.');
             $last=json_decode(end($steps)['roles'],true);if(array_diff($last,['admin','superadmin']))throw new DomainException('Oxirgi bosqich faqat administratorlar uchun bo‘lsin.');
-            Yii::$app->db->transaction(function()use($steps){Yii::$app->db->createCommand()->delete('route_step')->execute();foreach($steps as $s)Yii::$app->db->createCommand()->insert('route_step',$s)->execute();Catalog::audit((int)$this->actor()->id,'route_update',json_encode($steps,JSON_UNESCAPED_UNICODE));});Yii::$app->session->setFlash('success','Marshrut saqlandi. Avval yuborilgan arizalar oldingi marshrutda qoladi.');return $this->refresh();
+            Yii::$app->db->transaction(function()use($steps){$auditBefore=(new Query())->from('route_step')->orderBy('position')->all();Yii::$app->db->createCommand()->delete('route_step')->execute();foreach($steps as $s)Yii::$app->db->createCommand()->insert('route_step',$s)->execute();Catalog::audit((int)$this->actor()->id,'route_update',json_encode(['before'=>$auditBefore,'after'=>$steps],JSON_UNESCAPED_UNICODE));});Yii::$app->session->setFlash('success','Marshrut saqlandi. Avval yuborilgan arizalar oldingi marshrutda qoladi.');return $this->refresh();
         }catch(\Throwable $e){$this->message($e);}}
         return $this->render('route',['steps'=>(new Query())->from('route_step')->orderBy('position')->all()]);
     }
@@ -194,16 +195,37 @@ class AdminController extends BaseController
             if($op==='configure'){\app\services\Hemis::configure((string)Yii::$app->request->post('host'),(string)Yii::$app->request->post('token'));$message='HEMIS sozlamalari saqlandi.';}
             elseif($op==='test'){ $items=\app\services\Hemis::fetch('structure');$message='HEMIS ulanishi ishladi. Tuzilma yozuvlari: '.count($items); }
             elseif(in_array($op,['structure','employees'],true)){
-                $items=\app\services\Hemis::fetch($op);$result=$op==='structure'?\app\services\Hemis::applyStructure($items,(int)Yii::$app->request->post('university_id')?:null):\app\services\Hemis::applyEmployees($items,true,$this->actor());
+                $items=\app\services\Hemis::fetch($op);$result=$op==='structure'?\app\services\Hemis::applyStructure($items,(int)Yii::$app->request->post('university_id')?:null,$this->actor()):\app\services\Hemis::applyEmployees($items,true,$this->actor());
                 if($op==='employees'){$result['finished_at']=date('Y-m-d H:i:s');file_put_contents(Yii::getAlias('@runtime/hemis-import-last.json'),json_encode($result,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),LOCK_EX);}
                 if($op==='structure'){$message='Tuzilma importi: '.$result['faculties'].' fakultet, '.$result['departments'].' kafedra, '.$result['units'].' bo‘lim. Turi tuzatilgan: '.$result['reclassified'].'. Tekshirish kerak: '.$result['needs_review'].'. ';}else $message='';
                 $message.='Import: '.$result['saved'].' saqlandi, '.$result['skipped'].' o‘tkazildi.'.(!empty($result['unlinked'])?' Bolimga biriktirilmagan: '.$result['unlinked'].'. Avval tuzilmani import qiling, keyin xodimlarni qayta yuklang.':'');
             }else throw new DomainException('Amal noma’lum.');
             if($op==='employees'){$message.=' Faollashtirildi: '.($result['activated']??0).'. Qayta tiklandi: '.$result['restored'].'. Ro‘yxatga yozilgan xodimlar: '.$result['unique_users'].'.';if(!empty($result['reasons']['Superadministrator o‘chirgan hisob']))$message.=' Xodimlarni superadministrator hisobida qayta import qiling.';}
             if(in_array($op,['structure','employees'],true) && !empty($result['reasons'])){foreach($result['reasons'] as $reason=>$count)$message.=' '.$reason.': '.$count.'.';}
-            Catalog::audit((int)$this->actor()->id,'hemis_'.$op,$message);Yii::$app->session->setFlash($op==='employees' && (empty($result['saved']) || !empty($result['skipped']))?'warning':'success',$message);return $this->refresh();
+            Catalog::audit((int)$this->actor()->id,'hemis_'.$op,json_encode(['message'=>$message,'result'=>$result??null,'host'=>\app\services\Hemis::settings()['host']??null,'api_key_updated'=>$op==='configure' && trim((string)Yii::$app->request->post('token',''))!==''],JSON_UNESCAPED_UNICODE));Yii::$app->session->setFlash($op==='employees' && (empty($result['saved']) || !empty($result['skipped']))?'warning':'success',$message);return $this->refresh();
         }catch(\Throwable $e){$this->message($e);}}
         return $this->render('hemis',['settings'=>\app\services\Hemis::settings(),'universities'=>(new Query())->from('org')->where(['kind'=>'university'])->all(),'archivedHemisCount'=>(int)User::find()->where(['not',['deleted_at'=>null]])->andWhere(['not',['hemis_id'=>null]])->count(),'lastImport'=>is_file(Yii::getAlias('@runtime/hemis-import-last.json'))?json_decode(file_get_contents(Yii::getAlias('@runtime/hemis-import-last.json')),true):null]);
     }
-    public function actionAudit(){return $this->render('audit',['rows'=>(new Query())->select(['a.*','actor'=>'u.name'])->from(['a'=>'audit'])->leftJoin(['u'=>'user'],'u.id=a.actor_id')->orderBy(['a.id'=>SORT_DESC])->limit(300)->all()]);}
+    public function actionAudit()
+    {
+        if($this->actor()->role!=='superadmin'){Catalog::audit((int)$this->actor()->id,'audit_access_denied','Amallar jurnaliga kirishga urinish');throw new \yii\web\ForbiddenHttpException('Amallar jurnali faqat superadministratorga ochiq.');}
+        if(!Yii::$app->request->isGet)throw new \yii\web\MethodNotAllowedHttpException('Faqat GET.');
+        $request=Yii::$app->request;$source=(string)$request->get('source','audit');if(!in_array($source,['audit','history'],true))throw new \yii\web\BadRequestHttpException('Jurnal turi noto‘g‘ri.');
+        $table=$source==='history'?'review':'audit';$query=(new Query())->from(['a'=>$table])->leftJoin(['u'=>'user'],'u.id=a.actor_id');
+        $search=mb_substr(trim((string)$request->get('q','')),0,150);$action=mb_substr(trim((string)$request->get('action','')),0,80);
+        $detail=$source==='history'?'a.reason':'a.details';
+        if($search!=='')$query->andWhere(['or',['like','u.name',$search],['like','u.username',$search],['like','a.action',$search],['like',$detail,$search]]);
+        if($action!=='')$query->andWhere(['a.action'=>$action]);
+        $actor=(string)$request->get('actor','');if($actor!==''){if(!ctype_digit($actor))throw new \yii\web\BadRequestHttpException('Foydalanuvchi ID noto‘g‘ri.');$query->andWhere(['a.actor_id'=>(int)$actor?:null]);}
+        $zone=new \DateTimeZone(Yii::$app->timeZone);$dates=[];
+        foreach(['from','to'] as $field){$raw=(string)$request->get($field,'');if($raw==='')continue;$date=\DateTimeImmutable::createFromFormat('!Y-m-d',$raw,$zone);if(!$date || $date->format('Y-m-d')!==$raw)throw new \yii\web\BadRequestHttpException('Sanani to‘g‘ri kiriting.');$dates[$field]=$date;}
+        if(isset($dates['from'],$dates['to']) && $dates['from']>$dates['to'])throw new \yii\web\BadRequestHttpException('Sana oralig‘i noto‘g‘ri.');
+        if(isset($dates['from']))$query->andWhere(['>=','a.created_at',$dates['from']->getTimestamp()]);
+        if(isset($dates['to']))$query->andWhere(['<','a.created_at',$dates['to']->modify('+1 day')->getTimestamp()]);
+        $total=(int)(clone $query)->count();$page=min(max(1,(int)$request->get('page',1)),max(1,(int)ceil($total/50)));
+        $select=['a.*','actor'=>'u.name','username'=>'u.username','role'=>'u.role'];if($source==='history')$select['details']='a.reason';
+        $rows=$query->select($select)->orderBy(['a.created_at'=>SORT_DESC,'a.id'=>SORT_DESC])->limit(50)->offset(($page-1)*50)->all();
+        $actions=(new Query())->select('action')->from($table)->distinct()->orderBy('action')->column();
+        return $this->render('audit',compact('rows','total','page','actions','source'));
+    }
 }

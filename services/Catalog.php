@@ -38,6 +38,6 @@ class Catalog
     }
     public static function audit(?int $actor, string $action, string $details): void
     {
-        Yii::$app->db->createCommand()->insert('audit',['actor_id'=>$actor,'action'=>$action,'details'=>$details,'created_at'=>time()])->execute();
+        Yii::$app->db->createCommand()->insert('audit',['actor_id'=>$actor,'action'=>$action,'details'=>Audit::encode($actor,$details),'created_at'=>time()])->execute();
     }
 }

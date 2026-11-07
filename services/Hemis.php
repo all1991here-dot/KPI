@@ -49,9 +49,9 @@ class Hemis
         }
         throw new DomainException('Import 200 sahifadan oshdi; natija qo‘llanmadi.');
     }
-    public static function applyStructure(array $items,?int $universityId=null): array
+    public static function applyStructure(array $items,?int $universityId=null,?User $actor=null): array
     {
-        return Yii::$app->db->transaction(function()use($items,$universityId){
+        return Yii::$app->db->transaction(function()use($items,$universityId,$actor){
             $roots=(new Query())->from('org')->where(['kind'=>'university'])->all();
             $university=$universityId?(new Query())->from('org')->where(['id'=>$universityId,'kind'=>'university'])->one():(count($roots)===1?$roots[0]:null);
             if(!$university || trim($university['name'])==='Universitet')throw new DomainException('Avval universitet nomini qolda toldiring va import uchun universitetni tanlang.');
@@ -91,6 +91,7 @@ class Hemis
                 $values=['hemis_id'=>(string)$id,'name'=>$name,'kind'=>$kind,'parent_id'=>$parent,'hemis_type_code'=>$type['type_code'],'hemis_type_name'=>$type['type_name'],'hemis_parent_id'=>$sourceParent,'type_verified'=>$type['verified'],'needs_review'=>$type['review'],'classification_note'=>$type['note']?:null];
                 if($old){Yii::$app->db->createCommand()->update('org',$values,['id'=>$old['id']])->execute();$local[$id]=(int)$old['id'];if($old['kind']!==$kind){$result['reclassified']++;Catalog::audit(null,'org_hemis_reclassified',json_encode(['id'=>$old['id'],'old_kind'=>$old['kind'],'kind'=>$kind,'parent_id'=>$parent],JSON_THROW_ON_ERROR));}}
                 else{Yii::$app->db->createCommand()->insert('org',$values)->execute();$local[$id]=(int)Yii::$app->db->lastInsertID;}
+                Catalog::audit($actor?(int)$actor->id:null,'hemis_org_save',json_encode(['org_id'=>$local[$id],'before'=>$old?:null,'after'=>$values],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR));
                 $result['saved']++;$result[['faculty'=>'faculties','department'=>'departments','unit'=>'units'][$kind]]++;if($type['review'])$result['needs_review']++;
             }}
 
@@ -106,7 +107,7 @@ class Hemis
         return Yii::$app->db->transaction(function()use($items,$restoreDeleted,$actor){
             $result=['restored'=>0,'unique_users'=>0,'received'=>count($items),'saved'=>0,'created'=>0,'updated'=>0,'skipped'=>0,'unlinked'=>0,'reasons'=>[]];$initialHash=null;$seenUsers=[];$accountEvents=[];
             foreach((new Query())->select(['action','details'])->from('audit')->where(['action'=>['user_block','user_unblock','hemis_user_restore','user_save']])->orderBy('id')->all() as $event){
-                $eventId=null;if(preg_match('/^User #(\d+)(?: |$)/',$event['details'],$match))$eventId=$match[1];elseif($event['action']==='user_save')$eventId=json_decode($event['details'],true)['user_id']??null;
+                $payload=json_decode($event['details'],true);$eventId=is_array($payload)?($payload['user_id']??null):null;$message=is_array($payload)?($payload['message']??''):$event['details'];if(!$eventId && preg_match('/^User #(\d+)(?: |$)/',$message,$match))$eventId=$match[1];
                 if($eventId)$accountEvents[$eventId]=$event['action'];
             }
             foreach($items as $raw){
@@ -114,7 +115,7 @@ class Hemis
                 $id=self::id($item['id']??null);$name=$item['full_name']??'';
                 if(!$id || $name===''){$result['skipped']++;$reason=!$id?'HEMIS ID yo‘q':'F.I.Sh. yo‘q';$result['reasons'][$reason]=($result['reasons'][$reason]??0)+1;continue;}
                 $department=self::id($item['department']??$item['_department']??$item['department_id']??null);$org=$department?(new Query())->from('org')->where(['hemis_id'=>$department])->one():null;
-                $user=User::findOne(['hemis_id'=>$id]);$new=!$user;
+                $user=User::findOne(['hemis_id'=>$id]);$new=!$user;$auditBefore=Audit::userData($user);
                 if($org && Organization::blockedBy((int)$org['id']) && (!$user || (int)$user->org_id!==(int)$org['id'])){$org=null;$result['reasons']['Bo‘lim bloklangan']=($result['reasons']['Bo‘lim bloklangan']??0)+1;}
                 if($user && $user->deleted_at){
                     if(!$restoreDeleted){$result['skipped']++;$result['reasons']['Superadministrator o‘chirgan hisob']=($result['reasons']['Superadministrator o‘chirgan hisob']??0)+1;continue;}
@@ -146,7 +147,7 @@ class Hemis
                     'email'=>self::text($item['email']??null),
                 ];
                 $user->hemis_profile=json_encode($profile,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
-                $user->save(false);$result['saved']++;$result[$new?'created':'updated']++;if(!isset($seenUsers[$id])){$seenUsers[$id]=true;$result['unique_users']++;}
+                $user->save(false);Catalog::audit($actor?(int)$actor->id:null,'hemis_user_save',json_encode(['user_id'=>$user->id,'before'=>$auditBefore,'after'=>Audit::userData($user)],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR));$result['saved']++;$result[$new?'created':'updated']++;if(!isset($seenUsers[$id])){$seenUsers[$id]=true;$result['unique_users']++;}
             }
             return $result;
         });
