@@ -23,7 +23,7 @@ class KpiController extends BaseController
         $recent=(clone $q)->select(['a.*','employee'=>'u.name','indicator'=>'i.name','period'=>'p.name'])->orderBy(['a.updated_at'=>SORT_DESC])->limit(8)->all();
         $periods=(new Query())->from('period')->orderBy(['starts'=>SORT_DESC])->all();$selected=null;
         foreach($periods as $period)if((int)$period['id']===$periodId)$selected=$period;
-        $details=\app\services\Dashboard::details($q,$selected);
+        $details=\app\services\Dashboard::details($q,$selected,$this->actor()->role!=='teacher');
         return $this->render('index',compact('periodId','counts','score','sections','recent','periods')+$details);
     }
     public function actionApplications()
@@ -86,7 +86,7 @@ class KpiController extends BaseController
     }
     public function actionCriteria()
     {
-        $category=(string)Yii::$app->request->get('category',$this->actor()->category?:'DSC');$period=(int)Yii::$app->request->get('period',0);
+        $category=$this->actor()->role==='teacher'?(string)$this->actor()->category:(string)Yii::$app->request->get('category',$this->actor()->category?:'DSC');$period=(int)Yii::$app->request->get('period',0);
         $q=(new Query())->from(['i'=>'indicator'])->where(['i.category'=>$category,'i.deleted_at'=>null]);
         $q->select(['i.*']);if($period)$q->addSelect(['enabled'=>'r.enabled','decision'=>'r.decision','configured_score'=>'r.base_score'])->leftJoin(['r'=>'period_rule'],'r.indicator_id=i.id AND r.period_id=:p',[':p'=>$period]);
         return $this->render('criteria',['rows'=>$q->orderBy('i.id')->all(),'category'=>$category,'periodId'=>$period,'periods'=>(new Query())->from('period')->orderBy(['starts'=>SORT_DESC])->all()]);
@@ -99,14 +99,14 @@ class KpiController extends BaseController
     public function actionProfile(){return $this->render('profile',['user'=>$this->actor(),'org'=>(new Query())->from('org')->where(['id'=>$this->actor()->org_id])->one()]);}
     public function actionReports()
     {
-        $q=$this->scoped()->andWhere(['a.status'=>'approved']);$request=Yii::$app->request;
-        foreach(['period'=>'a.period_id','category'=>'a.category','employee'=>'a.employee_id'] as $key=>$column)if($request->get($key)!==null && $request->get($key)!=='')$q->andWhere([$column=>$request->get($key)]);
-        if($request->get('org')){
+        $q=$this->scoped()->andWhere(['a.status'=>'approved']);$request=Yii::$app->request;$personal=$this->actor()->role==='teacher';
+        foreach(($personal?['period'=>'a.period_id']:['period'=>'a.period_id','category'=>'a.category','employee'=>'a.employee_id']) as $key=>$column)if($request->get($key)!==null && $request->get($key)!=='')$q->andWhere([$column=>$request->get($key)]);
+        if(!$personal && $request->get('org')){
             $orgId=(int)$request->get('org');$orgs=(new Query())->select('id')->from('org')->where(['or',['id'=>$orgId],['parent_id'=>$orgId]])->column();
             $children=(new Query())->select('id')->from('org')->where(['parent_id'=>$orgs])->column();$q->andWhere(['u.org_id'=>array_merge($orgs,$children)]);
         }
         $q->leftJoin(['o'=>'org'],'o.id=u.org_id')->leftJoin(['f'=>'org'],'f.id=o.parent_id');
-        $group=(string)$request->get('group','employee');if(!in_array($group,['employee','department','unit','faculty','university'],true))$group='employee';
+        $group=$personal?'employee':(string)$request->get('group','employee');if(!in_array($group,['employee','department','unit','faculty','university'],true))$group='employee';
         if($group==='employee'){$q->select(['employee_id'=>'u.id','employee'=>'u.name','category'=>'a.category','org'=>'o.name','score_cents'=>'SUM(a.score_cents)','applications'=>'COUNT(*)'])->groupBy(['u.id','u.name','a.category','o.name']);}
         elseif(in_array($group,['department','unit'],true)){$q->andWhere($group==='department'?['o.kind'=>'department','o.type_verified'=>1]:['or',['o.kind'=>'unit'],['o.type_verified'=>0]]);$q->select(['employee_id'=>'o.id','employee'=>'o.name','category'=>new \yii\db\Expression("''"),'org'=>'f.name','score_cents'=>'SUM(a.score_cents)','applications'=>'COUNT(*)'])->groupBy(['o.id','o.name','f.name']);}
         elseif($group==='faculty'){$name=new \yii\db\Expression("CASE WHEN o.kind='faculty' AND o.type_verified=1 THEN o.name WHEN f.kind='faculty' AND f.type_verified=1 THEN f.name ELSE 'Fakultetga biriktirilmagan' END");$key=new \yii\db\Expression("CASE WHEN o.kind='faculty' AND o.type_verified=1 THEN o.id WHEN f.kind='faculty' AND f.type_verified=1 THEN f.id ELSE 0 END");$q->select(['employee_id'=>$key,'employee'=>$name,'category'=>new \yii\db\Expression("''"),'org'=>new \yii\db\Expression("''"),'score_cents'=>'SUM(a.score_cents)','applications'=>'COUNT(*)'])->groupBy([$key,$name]);}
@@ -114,9 +114,9 @@ class KpiController extends BaseController
         $rows=$q->orderBy(['score_cents'=>SORT_DESC,'employee'=>SORT_ASC])->all();
         if($group==='university' && isset($rows[0]) && !(int)$rows[0]['applications'])$rows=[];
         if(in_array($request->get('format'),['csv','xlsx'],true)){
-            $table=[['O‘rin','Xodim / bo‘lim','Toifa','Yuqori bo‘lim','Ball','Tasdiqlangan arizalar']];foreach($rows as $i=>$row)$table[]=[$i+1,$row['employee']??'Belgilanmagan',Catalog::CATEGORIES[$row['category']]??$row['category'],$row['org']??'',number_format($row['score_cents']/100,2,'.',''),$row['applications']];
+            $table=[[$personal?'№':'O‘rin',$personal?'Xodim':'Xodim / bo‘lim','Toifa','Yuqori bo‘lim','Ball','Tasdiqlangan arizalar']];foreach($rows as $i=>$row)$table[]=[$i+1,$row['employee']??'Belgilanmagan',Catalog::CATEGORIES[$row['category']]??$row['category'],$row['org']??'',number_format($row['score_cents']/100,2,'.',''),$row['applications']];
             return \app\services\Export::download($table,(string)$request->get('format'));
         }
-        return $this->render('reports',['rows'=>$rows,'group'=>$group,'periods'=>(new Query())->from('period')->orderBy(['starts'=>SORT_DESC])->all(),'orgs'=>(new Query())->from('org')->orderBy('name')->all()]);
+        return $this->render('reports',['rows'=>$rows,'group'=>$group,'periods'=>(new Query())->from('period')->orderBy(['starts'=>SORT_DESC])->all(),'orgs'=>$personal?[]:(new Query())->from('org')->orderBy('name')->all()]);
     }
 }

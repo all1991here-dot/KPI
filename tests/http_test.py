@@ -31,7 +31,8 @@ class Client:
         return self.opener.open(urllib.request.Request(url,encoded,headers),timeout=60)
     def login(self, name):
         r=self.post('auth/login',{'username':'http_'+name,'password':PASSWORD})
-        check('Boshqaruv paneli' in r.read().decode(),name+' login')
+        html=r.read().decode()
+        check('name="username"' not in html and ('Boshqaruv paneli' in html or 'Shaxsiy panel' in html),name+' login')
 def fail_status(call,status,name):
     try:call()
     except urllib.error.HTTPError as e:check(e.code==status,name);return

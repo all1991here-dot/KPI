@@ -3,9 +3,10 @@ use yii\helpers\{Html,Url};
 use app\services\Ui;
 use app\models\User;
 $user=Yii::$app->user->identity;
+$personal=$user && $user->role==='teacher';
 $route=$this->context->route;
 $mine=(bool)Yii::$app->request->get('mine');$queue=(bool)Yii::$app->request->get('queue');$appeals=(bool)Yii::$app->request->get('appeals');$isApplications=$route==='kpi/applications';
-$navigation=[['kpi/index','Boshqaruv paneli','grid'],['kpi/create','Yangi faoliyat','plus'],['kpi/criteria','KPI mezonlari','book'],['kpi/reports','Reyting va hisobot','chart'],['kpi/notifications','Bildirishnomalar','bell'],['kpi/profile','Shaxsiy profil','user']];
+$navigation=[['kpi/index',$personal?'Shaxsiy panel':'Boshqaruv paneli','grid'],['kpi/create','Yangi faoliyat','plus'],['kpi/criteria',$personal?'Mening mezonlarim':'KPI mezonlari','book'],['kpi/reports',$personal?'Mening natijalarim':'Reyting va hisobot','chart'],['kpi/notifications','Bildirishnomalar','bell'],['kpi/profile','Shaxsiy profil','user']];
 $adminNavigation=[['users','Foydalanuvchilar','users'],['structure','Universitet tuzilmasi','building'],['periods','Baholash davrlari','calendar'],['rules','Hisoblash qoidalari','settings'],['route','Tasdiqlash bosqichlari','route'],['hemis','HEMIS integratsiyasi','link'],['audit','Amallar jurnali','history']];
 if($user && $user->role==='superadmin')$adminNavigation[]=['indicators','Mezonlarni boshqarish','book'];
 $pageTitle=str_replace([' · KPI',' · FarDU KPI'],'',$this->title?:'Boshqaruv paneli');
@@ -30,7 +31,7 @@ $assetVersion='3.3.0';
 <?php foreach($navigation as [$url,$label,$icon]): $active=$route===$url && !($url==='kpi/applications' && $queue); ?>
 <?= Html::a(Ui::icon($icon).'<span>'.Ui::h($label).'</span>',[$url],['class'=>$active?'nav-link active':'nav-link','aria-current'=>$active?'page':null]) ?>
 <?php if($url==='kpi/index'): ?>
-<div class="application-nav-group"><button type="button" class="nav-link nav-group-toggle" data-nav-group-toggle aria-controls="application-subnav" aria-expanded="<?= $isApplications?'true':'false' ?>"><?= Ui::icon('file') ?><span>Arizalar</span><span class="nav-chevron" aria-hidden="true">⌄</span></button>
+<div class="application-nav-group"><button type="button" class="nav-link nav-group-toggle" data-nav-group-toggle aria-controls="application-subnav" aria-expanded="<?= $isApplications?'true':'false' ?>"><?= Ui::icon('file') ?><span><?= $personal?'Mening arizalarim':'Arizalar' ?></span><span class="nav-chevron" aria-hidden="true">⌄</span></button>
 <div id="application-subnav" class="nav-submenu"<?= $isApplications?'':' hidden' ?>>
 <?php if($user->canReview()):$active=$isApplications && !$mine && !$queue && !$appeals; ?><?= Html::a('Barcha arizalar',['kpi/applications'],['class'=>$active?'nav-link active':'nav-link','aria-current'=>$active?'page':null]) ?><?php endif ?>
 <?php $active=$isApplications && !$queue && !$appeals && ($mine || !$user->canReview()); ?><?= Html::a('Mening arizalarim',['kpi/applications','mine'=>1],['class'=>$active?'nav-link active':'nav-link','aria-current'=>$active?'page':null]) ?>

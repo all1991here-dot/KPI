@@ -30,7 +30,7 @@ with sync_playwright() as p:
     teacher_context=browser.new_context();teacher=teacher_context.new_page();login(teacher,'teacher')
     page.get_by_role('button',name='Bloklash',exact=True).click();page.wait_for_load_state('networkidle')
     teacher.goto(base+'?r=kpi/index',wait_until='networkidle');assert teacher.locator('[name=username]').count()==1
-    page.get_by_role('button',name='Blokdan chiqarish',exact=True).click();page.wait_for_load_state('networkidle');login(teacher,'teacher');assert 'Boshqaruv paneli' in teacher.title()
+    page.get_by_role('button',name='Blokdan chiqarish',exact=True).click();page.wait_for_load_state('networkidle');login(teacher,'teacher');assert teacher.title()=='Shaxsiy KPI paneli'
     for width in [390,320]:
         page.set_viewport_size({'width':width,'height':900});page.wait_for_timeout(100);assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
     page.set_viewport_size({'width':1440,'height':1050})
