@@ -13,7 +13,7 @@ class BaseController extends Controller
         Yii::$app->response->headers->set('Referrer-Policy','same-origin');
         Yii::$app->response->headers->set('Cache-Control','no-store');
         if(Yii::$app->user->isGuest){$this->redirect(['auth/login']);return false;}
-        if(Yii::$app->user->identity->must_change_password && $action->uniqueId!=='auth/password' && $action->uniqueId!=='auth/logout'){$this->redirect(['auth/password']);return false;}
+        if(!empty(Yii::$app->params['passwordChangeEnabled']) && Yii::$app->user->identity->must_change_password && $action->uniqueId!=='auth/password' && $action->uniqueId!=='auth/logout'){$this->redirect(['auth/password']);return false;}
         if(Yii::$app->user->identity->role==='unassigned' && !in_array($action->uniqueId,['auth/password','auth/logout','kpi/profile','kpi/employee-photo'],true))throw new ForbiddenHttpException('Rol biriktirilmagan. Superadministratorga murojaat qiling.');
         return true;
     }

@@ -50,9 +50,10 @@ for route in ['kpi/index','kpi/applications','kpi/criteria','kpi/reports','kpi/p
 admin.post('admin/users',{'name':'UI Created Teacher','username':'http_created','role':'teacher','category':'PHD','org_id':3,'degree':'PhD','position':'Dotsent','password':PASSWORD,'active':1}).read()
 check('http_created' in admin.get('admin/users').read().decode(),'create user through admin form')
 created=Client();created.login('created')
-check('Parolni yangilash' in created.get('kpi/index').read().decode(),'temporary password requires change')
+check('Shaxsiy KPI paneli' in created.get('kpi/index').read().decode(),'administrator-issued password opens dashboard directly')
 response=created.post('auth/password',{'old_password':PASSWORD,'password':'Changed-HttpPassword2026!','confirmation':'Changed-HttpPassword2026!'})
-check('Parol yangilandi.' in response.read().decode(),'first login password change works')
+check('Shaxsiy KPI paneli' in response.read().decode(),'disabled password-change POST returns to dashboard')
+created=Client();created.login('created')
 for group in ['department','faculty','university']:
     check(admin.get('kpi/reports',group=group).status==200,'report group '+group)
 rules=admin.get('admin/rules',period=1,category='PHD').read().decode()

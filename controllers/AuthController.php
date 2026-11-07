@@ -37,6 +37,7 @@ class AuthController extends BaseController
     public function actionLogout(){ $this->postOnly();Yii::$app->user->logout();return $this->redirect(['auth/login']); }
     public function actionPassword()
     {
+        if(empty(Yii::$app->params['passwordChangeEnabled']))return $this->redirect([$this->actor()->role==='unassigned'?'kpi/profile':'kpi/index']);
         $error='';$user=$this->actor();
         if(Yii::$app->request->isPost){
             $old=(string)Yii::$app->request->post('old_password','');$password=(string)Yii::$app->request->post('password','');
