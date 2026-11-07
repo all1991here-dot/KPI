@@ -8,21 +8,27 @@ html[data-theme=dark] .galaxy-app .workspace:after{opacity:.5;background-image:r
 .galaxy-horizon{position:fixed;inset:auto -15vw -195px 9vw;height:290px;z-index:-1;pointer-events:none;border-radius:50% 50% 0 0;border-top:1px solid #8aa5ff70;box-shadow:0 -12px 50px #506de01a,inset 0 22px 38px #6862d71a;transform:rotate(-5deg)}
 .galaxy-horizon:after{content:'';position:absolute;inset:35px -15vw auto -7vw;height:220px;border-radius:50%;border-top:1px solid #789fee55;transform:rotate(9deg)}
 html[data-theme=light] .galaxy-horizon{display:none}
-/* Daylight: slow clouds and warm sunlight behind the opaque dashboard cards. */
+/* Academic waves remain inside the workspace, behind opaque content. */
 html[data-theme=light] .galaxy-app .workspace:before{
-  background:radial-gradient(ellipse at 94% 4%,#ffe5aa80,transparent 42%),linear-gradient(155deg,#e7f2ff,#f5f8fd 52%,#eaf5f4);
+  background:linear-gradient(145deg,#f5faff,#edf5ff 55%,#e8f9fa);
 }
 html[data-theme=light] .galaxy-app .workspace:after{
-  inset:-32px -32px -32px 194px;
-  background:radial-gradient(ellipse at 18% 23%,#ffffffd9,transparent 34%),radial-gradient(ellipse at 80% 47%,#ffffffb3,transparent 33%),radial-gradient(ellipse at 36% 88%,#c9e4f780,transparent 38%);
-  animation:kpi-daylight-drift 28s ease-in-out infinite alternate;
+  background-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%201600%20500%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22b%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20stop-color%3D%22%23268be9%22%20stop-opacity%3D%22.16%22%2F%3E%3Cstop%20offset%3D%22.48%22%20stop-color%3D%22%23318ff0%22%20stop-opacity%3D%22.38%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23268be9%22%20stop-opacity%3D%22.16%22%2F%3E%3C%2FlinearGradient%3E%3ClinearGradient%20id%3D%22t%22%3E%3Cstop%20stop-color%3D%22%2331cbd2%22%20stop-opacity%3D%22.12%22%2F%3E%3Cstop%20offset%3D%22.55%22%20stop-color%3D%22%2319b8cf%22%20stop-opacity%3D%22.35%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%2331cbd2%22%20stop-opacity%3D%22.12%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Cpath%20d%3D%22M0%20240%20C200%2080%20600%2080%20800%20240%20S1400%20400%201600%20240%20L1600%20320%20C1400%20480%201000%20480%20800%20320%20S200%20160%200%20320Z%22%20fill%3D%22url%28%23b%29%22%2F%3E%3Cpath%20d%3D%22M0%20310%20C200%20430%20600%20430%20800%20310%20S1400%20190%201600%20310%20L1600%20352%20C1400%20232%201000%20232%20800%20352%20S200%20472%200%20352Z%22%20fill%3D%22url%28%23t%29%22%2F%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%2351a9ef%22%20stroke-opacity%3D%22.22%22%3E%3Cpath%20d%3D%22M0%20255%20C200%2095%20600%2095%20800%20255%20S1400%20415%201600%20255%22%2F%3E%3Cpath%20d%3D%22M0%20270%20C200%20110%20600%20110%20800%20270%20S1400%20430%201600%20270%22%2F%3E%3Cpath%20d%3D%22M0%20285%20C200%20125%20600%20125%20800%20285%20S1400%20445%201600%20285%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E"),url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%201600%20500%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22b%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20stop-color%3D%22%23268be9%22%20stop-opacity%3D%22.16%22%2F%3E%3Cstop%20offset%3D%22.48%22%20stop-color%3D%22%23318ff0%22%20stop-opacity%3D%22.38%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23268be9%22%20stop-opacity%3D%22.16%22%2F%3E%3C%2FlinearGradient%3E%3ClinearGradient%20id%3D%22t%22%3E%3Cstop%20stop-color%3D%22%2331cbd2%22%20stop-opacity%3D%22.12%22%2F%3E%3Cstop%20offset%3D%22.55%22%20stop-color%3D%22%2319b8cf%22%20stop-opacity%3D%22.35%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%2331cbd2%22%20stop-opacity%3D%22.12%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Cpath%20d%3D%22M0%20240%20C200%2080%20600%2080%20800%20240%20S1400%20400%201600%20240%20L1600%20320%20C1400%20480%201000%20480%20800%20320%20S200%20160%200%20320Z%22%20fill%3D%22url%28%23b%29%22%2F%3E%3Cpath%20d%3D%22M0%20310%20C200%20430%20600%20430%20800%20310%20S1400%20190%201600%20310%20L1600%20352%20C1400%20232%201000%20232%20800%20352%20S200%20472%200%20352Z%22%20fill%3D%22url%28%23t%29%22%2F%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%2351a9ef%22%20stroke-opacity%3D%22.22%22%3E%3Cpath%20d%3D%22M0%20255%20C200%2095%20600%2095%20800%20255%20S1400%20415%201600%20255%22%2F%3E%3Cpath%20d%3D%22M0%20270%20C200%20110%20600%20110%20800%20270%20S1400%20430%201600%20270%22%2F%3E%3Cpath%20d%3D%22M0%20285%20C200%20125%20600%20125%20800%20285%20S1400%20445%201600%20285%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+  background-repeat:repeat-x;
+  background-size:1600px 58vh,1600px 74vh;
+  background-position:0 bottom,0 15%;
+  animation:kpi-academic-waves 32s linear infinite;
 }
-@keyframes kpi-daylight-drift{
-  from{transform:translate3d(-12px,-8px,0)}
-  to{transform:translate3d(12px,16px,0)}
+@keyframes kpi-academic-waves{
+  from{background-position:0 bottom,0 15%}
+  to{background-position:1600px bottom,-1600px 15%}
 }
-@media(max-width:1000px){html[data-theme=light] .galaxy-app .workspace:after{left:-32px}}
-@media(prefers-reduced-motion:reduce){html[data-theme=light] .galaxy-app .workspace:after{animation:none;transform:none}}
+@media(max-width:1000px){html[data-theme=light] .galaxy-app .workspace:after{background-size:1000px 55vh,1000px 70vh;animation-name:kpi-academic-waves-mobile}}
+@keyframes kpi-academic-waves-mobile{
+  from{background-position:0 bottom,0 15%}
+  to{background-position:1000px bottom,-1000px 15%}
+}
+@media(prefers-reduced-motion:reduce){html[data-theme=light] .galaxy-app .workspace:after{animation:none}}
 html[data-theme=dark] .galaxy-app .sidebar{background:linear-gradient(180deg,#06162b,#081a32);border-right:1px solid #25405b}
 html[data-theme=dark] .galaxy-app .topbar{background:#091a30f5;border-bottom-color:var(--border)}
 html[data-theme=dark] .galaxy-app .card{background:var(--surface);border-color:var(--border);box-shadow:var(--shadow)}
