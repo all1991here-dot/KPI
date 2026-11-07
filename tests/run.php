@@ -4,7 +4,7 @@ Yii::setAlias('@app',dirname(__DIR__));
 $dir=dirname(__DIR__).'/runtime/tests-'.bin2hex(random_bytes(6));mkdir($dir,0700,true);
 $config=require dirname(__DIR__).'/config/console.php';$config['runtimePath']=$dir;$config['components']['db']=['class'=>yii\db\Connection::class,'dsn'=>'sqlite:'.$dir.'/test.sqlite'];
 new yii\console\Application($config);
-require dirname(__DIR__).'/migrations/m261105_000001_initial.php';ob_start();(new m261105_000001_initial())->up();ob_end_clean();require dirname(__DIR__).'/migrations/m261106_000001_employee_profile.php';ob_start();(new m261106_000001_employee_profile())->up();ob_end_clean();require dirname(__DIR__).'/migrations/m261106_000002_superadmin_management.php';ob_start();(new m261106_000002_superadmin_management())->up();ob_end_clean();require dirname(__DIR__).'/migrations/m261106_000003_organization_details.php';ob_start();(new m261106_000003_organization_details())->up();ob_end_clean();require dirname(__DIR__).'/migrations/m261106_000004_organization_types.php';ob_start();(new m261106_000004_organization_types())->up();ob_end_clean();require dirname(__DIR__).'/migrations/m261107_000001_notification_receipts.php';ob_start();(new m261107_000001_notification_receipts())->up();ob_end_clean();require dirname(__DIR__).'/migrations/m261107_000002_reviewer_notification_receipts.php';ob_start();(new m261107_000002_reviewer_notification_receipts())->up();ob_end_clean();Yii::$app->db->schema->refresh();
+require dirname(__DIR__).'/migrations/m261105_000001_initial.php';ob_start();(new m261105_000001_initial())->up();ob_end_clean();require dirname(__DIR__).'/migrations/m261106_000001_employee_profile.php';ob_start();(new m261106_000001_employee_profile())->up();ob_end_clean();require dirname(__DIR__).'/migrations/m261106_000002_superadmin_management.php';ob_start();(new m261106_000002_superadmin_management())->up();ob_end_clean();require dirname(__DIR__).'/migrations/m261106_000003_organization_details.php';ob_start();(new m261106_000003_organization_details())->up();ob_end_clean();require dirname(__DIR__).'/migrations/m261106_000004_organization_types.php';ob_start();(new m261106_000004_organization_types())->up();ob_end_clean();require dirname(__DIR__).'/migrations/m261107_000001_notification_receipts.php';ob_start();(new m261107_000001_notification_receipts())->up();ob_end_clean();require dirname(__DIR__).'/migrations/m261107_000002_reviewer_notification_receipts.php';ob_start();(new m261107_000002_reviewer_notification_receipts())->up();ob_end_clean();require dirname(__DIR__).'/migrations/m261107_000003_review_visibility.php';ob_start();(new m261107_000003_review_visibility())->up();ob_end_clean();Yii::$app->db->schema->refresh();
 use app\services\{Catalog,Workflow,ScoreCalculator,Access,Hemis};use app\models\User;use yii\db\Query;
 $count=0;
 function check(bool $condition,string $name):void{global $count;if(!$condition)throw new RuntimeException('FAIL '.$name);$count++;echo "PASS $name\n";}
@@ -46,7 +46,7 @@ try{
 
 try{
  Workflow::act($head,$b,'revoke','Outside final step');throw new RuntimeException('Non-final role revoked');
-}catch(DomainException $e){check(true,'only final role revokes');}
+}catch(DomainException $e){check(true,'only superadministrator revokes');}
 try{
  $returnId=fixture($teacher,$period,(int)$patent['id'],'Return');Workflow::act($teacher,$returnId,'submit');Workflow::act($head,$returnId,'return','Dalil aniqlashtirilsin');check(Workflow::application($returnId)['status']==='returned','return for revision');
  denied(fn()=>Workflow::act($teacher,$returnId,'appeal',''),'appeal reason mandatory');Workflow::act($teacher,$returnId,'appeal','Hujjat asosida qayta ko‘ring');Workflow::act($head,$returnId,'reject','Asos yetarli emas');check(Workflow::application($returnId)['status']==='rejected','rejection persisted');
@@ -106,7 +106,8 @@ try{
  Hemis::applyEmployees([['id'=>501,'full_name'=>'Complete Employee']]);$updated=User::findOne($imported->id);$profile=json_decode($updated->hemis_profile,true);
  check($updated->org_id===null && $updated->degree===null && $profile['phone']===null,'missing HEMIS values stored as absent rather than stale');
  $approved=Workflow::application($id);denied(fn()=>Workflow::save($teacher,$approved,[],$id),'teacher cannot edit approved document');
- Workflow::save($ordinaryAdmin,array_merge($approved,['title'=>'Administrator correction']),[],$id);
+ denied(fn()=>Workflow::save($ordinaryAdmin,array_merge($approved,['title'=>'Administrator correction']),[],$id),'ordinary admin cannot edit an approved document');
+ Workflow::save($admin,array_merge($approved,['title'=>'Administrator correction']),[],$id);
  $corrected=Workflow::application($id);check($corrected['status']==='draft' && (int)$corrected['employee_id']===(int)$teacher->id && $corrected['category']===$approved['category'],'admin edits another employee document without changing ownership/category');
  check((int)(new Query())->from('score_entry')->where(['application_id'=>$id])->sum('amount_cents')===0 && (int)$corrected['score_cents']===0,'admin correction reverses previous score exactly once');
  Workflow::save($admin,$corrected,[],$id);check((int)(new Query())->from('score_entry')->where(['application_id'=>$id])->sum('amount_cents')===0,'repeated admin correction does not reverse score twice');

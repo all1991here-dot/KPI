@@ -17,6 +17,7 @@ class Workflow
     public static function save(User $actor, array $data, array $files, ?int $id=null): int
     {
         $old=$id?self::application($id):null;
+        if($old && $old['status']==='approved' && $actor->role!=='superadmin')throw new DomainException('Tasdiqlangan arizani faqat superadministrator o‘zgartirishi mumkin.');
         if ($old && !$actor->isAdmin() && ((int)$old['employee_id']!==(int)$actor->id || !in_array($old['status'],['draft','returned'],true))) throw new DomainException('Faqat o‘zingizning qoralama yoki qaytarilgan arizangizni tahrirlaysiz.');
         $employee=$old?User::findOne($old['employee_id']):$actor;
         if(!$employee)throw new DomainException('Ariza egasi topilmadi.');
@@ -50,7 +51,7 @@ class Workflow
         try {
             return Yii::$app->db->transaction(function()use($actor,$data,$old,$id,$period,$indicator,$category,$title,$date,$quantity,$notes,$metric,$prepared,&$paths){
                 self::lockPeriod((int)$period['id']);
-                if ($id) { self::lockPeriod((int)$old['period_id']);$fresh=self::application($id);if(!$actor->isAdmin() && !in_array($fresh['status'],['draft','returned'],true))throw new DomainException('Ariza holati o‘zgardi. Sahifani yangilang.'); }
+                if ($id) { self::lockPeriod((int)$old['period_id']);$fresh=self::application($id);if($fresh['status']==='approved' && $actor->role!=='superadmin')throw new DomainException('Tasdiqlangan arizani faqat superadministrator o‘zgartirishi mumkin.');if(!$actor->isAdmin() && !in_array($fresh['status'],['draft','returned'],true))throw new DomainException('Ariza holati o‘zgardi. Sahifani yangilang.'); }
                 $values=['period_id'=>$period['id'],'indicator_id'=>$indicator['id'],'category'=>$category,'title'=>$title,'activity_date'=>$date,'quantity'=>$quantity,'metric_value'=>$metric,'notes'=>$notes,'updated_at'=>time(),'expert_score'=>null,'score_cents'=>0,'rule_snapshot'=>null,'route_snapshot'=>null,'step'=>0];
                 if($id && $actor->isAdmin()){$balance=(int)(new Query())->from('score_entry')->where(['application_id'=>$id])->sum('amount_cents');if($balance)self::ledger($id,$actor,-$balance,'Administrator tahriri: avvalgi ball bekor qilindi.');$values['status']='draft';Catalog::audit((int)$actor->id,'application_admin_edit',json_encode(['id'=>$id,'before'=>$fresh,'after'=>$values],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR));self::history($id,$actor,'admin_edit','Administrator tahriri. Oldingi holat: '.$fresh['status'].'. Qayta tasdiqlash talab etiladi.',0);}
                 if ($id) Yii::$app->db->createCommand()->update('application',$values,['id'=>$id])->execute();
@@ -70,7 +71,7 @@ class Workflow
         $file=(new Query())->from('evidence')->where(['id'=>$id])->one();if(!$file)throw new DomainException('Dalil topilmadi.');
         $app=self::application((int)$file['application_id']);
         if (!$actor->isAdmin() && ((int)$app['employee_id']!==(int)$actor->id || !in_array($app['status'],['draft','returned'],true)))throw new DomainException('Dalilni o‘chirishga ruxsat yo‘q.');
-        Yii::$app->db->transaction(function()use($actor,$id,$file,$app){self::lockPeriod((int)$app['period_id']);$fresh=self::application((int)$app['id']);if(!$actor->isAdmin() && !in_array($fresh['status'],['draft','returned'],true))throw new DomainException('Ariza holati o‘zgardi.');if($actor->isAdmin()){$balance=(int)(new Query())->from('score_entry')->where(['application_id'=>$app['id']])->sum('amount_cents');if($balance)self::ledger((int)$app['id'],$actor,-$balance,'Dalil administrator tomonidan tahrirlandi.');Yii::$app->db->createCommand()->update('application',['status'=>'draft','step'=>0,'score_cents'=>0,'expert_score'=>null,'rule_snapshot'=>null,'route_snapshot'=>null,'updated_at'=>time()],['id'=>$app['id']])->execute();}Yii::$app->db->createCommand()->delete('evidence',['id'=>$id])->execute();self::history((int)$app['id'],$actor,'remove_evidence','Dalil olib tashlandi.',0);});
+        Yii::$app->db->transaction(function()use($actor,$id,$file,$app){self::lockPeriod((int)$app['period_id']);$fresh=self::application((int)$app['id']);if($fresh['status']==='approved' && $actor->role!=='superadmin')throw new DomainException('Tasdiqlangan ariza dalilini faqat superadministrator o‘zgartirishi mumkin.');if(!$actor->isAdmin() && !in_array($fresh['status'],['draft','returned'],true))throw new DomainException('Ariza holati o‘zgardi.');if($actor->isAdmin()){$balance=(int)(new Query())->from('score_entry')->where(['application_id'=>$app['id']])->sum('amount_cents');if($balance)self::ledger((int)$app['id'],$actor,-$balance,'Dalil administrator tomonidan tahrirlandi.');Yii::$app->db->createCommand()->update('application',['status'=>'draft','step'=>0,'score_cents'=>0,'expert_score'=>null,'rule_snapshot'=>null,'route_snapshot'=>null,'updated_at'=>time()],['id'=>$app['id']])->execute();}Yii::$app->db->createCommand()->delete('evidence',['id'=>$id])->execute();self::history((int)$app['id'],$actor,'remove_evidence','Dalil olib tashlandi.',0);});
         @unlink(Yii::getAlias('@runtime/evidence/').$file['storage_name']);
     }
     public static function act(User $actor,int $id,string $action,string $reason='', $expert=null): void
@@ -107,7 +108,10 @@ class Workflow
                 if(!Access::canView($actor,$app) || $owner)throw new DomainException('O‘z arizangizni tekshira olmaysiz yoki ruxsat yo‘q.');
                 $steps=json_decode($app['route_snapshot']??'[]',true);$index=(int)$app['step'];
                 $step=$action==='revoke'?($steps?end($steps):null):($steps[$index]??null);
-                if(!$step || !in_array($actor->role,json_decode($step['roles'],true),true))throw new DomainException('Bu tekshiruv bosqichi sizga tegishli emas.');
+                if($action==='revoke'){
+                    if($actor->role!=='superadmin')throw new DomainException('Tasdiqni faqat superadministrator bekor qilishi mumkin.');
+                    if(!$step)throw new DomainException('Arizaning tasdiqlash marshruti topilmadi.');
+                }elseif(!$step || !in_array($actor->role,json_decode($step['roles'],true),true))throw new DomainException('Bu tekshiruv bosqichi sizga tegishli emas.');
                 if($reason==='')throw new DomainException('Qaror izohini kiriting.');
                 if($action==='revoke'){
                     if($app['status']!=='approved')throw new DomainException('Faqat tasdiqlangan qaror bekor qilinadi.');
@@ -167,7 +171,8 @@ class Workflow
     }
     private static function history(int $id,User $actor,string $action,string $reason,int $step): void
     {
-        Yii::$app->db->createCommand()->insert('review',['application_id'=>$id,'actor_id'=>$actor->id,'action'=>$action,'step'=>$step,'reason'=>$reason,'created_at'=>time()])->execute();
+        Yii::$app->db->createCommand()->insert('review',['application_id'=>$id,'actor_id'=>$actor->id,'action'=>$action,'step'=>$step,'reason'=>$reason,'created_at'=>time(),'visible_in_history'=>$actor->role==='superadmin'?0:1])->execute();
+        if($actor->role==='superadmin')Catalog::audit((int)$actor->id,'application_superadmin_'.$action,json_encode(['application_id'=>$id,'step'=>$step,'reason'=>$reason,'state'=>self::application($id)],JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR));
     }
     private static function ledger(int $id,User $actor,int $amount,string $reason): void
     {

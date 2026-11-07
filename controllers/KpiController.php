@@ -43,6 +43,7 @@ class KpiController extends BaseController
     public function actionCreate(?int $id=null)
     {
         $row=$id?Workflow::application($id):['period_id'=>'','indicator_id'=>'','title'=>'','activity_date'=>date('Y-m-d'),'quantity'=>1,'metric_value'=>'','notes'=>''];
+        if($id && $row['status']==='approved' && $this->actor()->role!=='superadmin')throw new \yii\web\ForbiddenHttpException('Tasdiqlangan arizani faqat superadministrator tahrirlaydi.');
         if($id && !$this->actor()->isAdmin() && ((int)$row['employee_id']!==(int)$this->actor()->id || !in_array($row['status'],['draft','returned'],true)))throw new \yii\web\ForbiddenHttpException('Tahrirlashga ruxsat yo‘q.');
         $category=$id && $this->actor()->isAdmin()?$row['category']:$this->actor()->category;
         if(Yii::$app->request->isPost){
@@ -54,7 +55,7 @@ class KpiController extends BaseController
     public function actionView(int $id)
     {
         $row=Workflow::application($id);if(!Access::canView($this->actor(),$row))throw new \yii\web\ForbiddenHttpException('Ruxsat yo‘q.');
-        return $this->render('view',['row'=>$row,'employee'=>\app\models\User::findOne($row['employee_id']),'indicator'=>(new Query())->from('indicator')->where(['id'=>$row['indicator_id']])->one(),'period'=>(new Query())->from('period')->where(['id'=>$row['period_id']])->one(),'rule'=>(new Query())->from('period_rule')->where(['period_id'=>$row['period_id'],'indicator_id'=>$row['indicator_id']])->one(),'files'=>(new Query())->from('evidence')->where(['application_id'=>$id])->all(),'history'=>(new Query())->select(['r.*','actor'=>'u.name'])->from(['r'=>'review'])->innerJoin(['u'=>'user'],'u.id=r.actor_id')->where(['r.application_id'=>$id])->orderBy('r.id')->all()]);
+        return $this->render('view',['row'=>$row,'employee'=>\app\models\User::findOne($row['employee_id']),'indicator'=>(new Query())->from('indicator')->where(['id'=>$row['indicator_id']])->one(),'period'=>(new Query())->from('period')->where(['id'=>$row['period_id']])->one(),'rule'=>(new Query())->from('period_rule')->where(['period_id'=>$row['period_id'],'indicator_id'=>$row['indicator_id']])->one(),'files'=>(new Query())->from('evidence')->where(['application_id'=>$id])->all(),'history'=>(new Query())->select(['r.*','actor'=>'u.name'])->from(['r'=>'review'])->innerJoin(['u'=>'user'],'u.id=r.actor_id')->where(['r.application_id'=>$id,'r.visible_in_history'=>1])->orderBy('r.id')->all()]);
     }
     public function actionAct(int $id)
     {
