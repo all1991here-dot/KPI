@@ -143,3 +143,99 @@
     control.appendChild(button);
   });
 })();
+
+// Decorative daytime network: drift, orbit and flowing currents alternate smoothly.
+(() => {
+  'use strict';
+  const root = document.documentElement;
+  const workspace = document.querySelector('.galaxy-app .workspace');
+  if (!workspace) return;
+  const canvas = document.createElement('canvas');
+  canvas.className = 'kpi-digital-network';
+  canvas.setAttribute('aria-hidden', 'true');
+  workspace.prepend(canvas);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) { canvas.remove(); return; }
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+  let width = 0, height = 0, points = [], frame = 0, last = 0, time = 0;
+  let suspended = false;
+  const active = () => !suspended && !document.hidden && root.dataset.theme === 'light' && !reduced.matches;
+  function paint(dt = 0) {
+    time += dt;
+    ctx.clearRect(0, 0, width, height);
+    const reach = width < 600 ? 145 : 205;
+    const phase = time / 14;
+    const mode = Math.floor(phase) % 3;
+    const blend = (1 - Math.cos((phase % 1) * Math.PI)) / 2;
+    const velocity = (p, kind) => {
+      if (kind === 1) return {x: -(p.y - height / 2) / Math.max(height, 1) * 22, y: (p.x - width / 2) / Math.max(width, 1) * 22};
+      if (kind === 2) return {x: 13 + Math.cos(p.y / 130 + time / 4) * 7, y: Math.sin(p.x / 170 + time / 5) * 13};
+      return {x: p.vx, y: p.vy};
+    };
+    points.forEach(p => {
+      if (dt) {
+        const a = velocity(p, mode), b = velocity(p, (mode + 1) % 3);
+        p.x += (a.x * (1 - blend) + b.x * blend) * dt;
+        p.y += (a.y * (1 - blend) + b.y * blend) * dt;
+        if (p.x < -reach) p.x = width + reach;
+        if (p.x > width + reach) p.x = -reach;
+        if (p.y < -reach) p.y = height + reach;
+        if (p.y > height + reach) p.y = -reach;
+      }
+    });
+    points.forEach((p, i) => {
+      for (let j = i + 1; j < points.length; j++) {
+        const q = points[j], distance = Math.hypot(p.x - q.x, p.y - q.y);
+        if (distance >= reach) continue;
+        ctx.strokeStyle = `rgba(38,125,209,${(1 - distance / reach) * .38})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke();
+        // A few connections carry a traveling light, rather than flashing.
+        if ((i + j) % 11 === 0) {
+          const progress = (time * .18 + p.phase) % 1;
+          ctx.fillStyle = 'rgba(16,162,221,.65)';
+          ctx.beginPath(); ctx.arc(p.x + (q.x - p.x) * progress, p.y + (q.y - p.y) * progress, 1.8, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+      const pulse = .5 + .5 * Math.sin(time * 1.2 + p.phase * Math.PI * 2);
+      const halo = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 11 + pulse * 4);
+      halo.addColorStop(0, 'rgba(27,175,233,.28)'); halo.addColorStop(1, 'rgba(27,175,233,0)');
+      ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(p.x, p.y, 15, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = `rgba(36,133,213,${.55 + pulse * .25})`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r + pulse * .6, 0, Math.PI * 2); ctx.fill();
+    });
+  }
+  function tick(now) {
+    frame = 0;
+    if (!active()) return;
+    if (!last || now - last >= 32) {
+      paint(last ? Math.min((now - last) / 1000, .08) : 0);
+      last = now;
+    }
+    frame = requestAnimationFrame(tick);
+  }
+  function sync() {
+    cancelAnimationFrame(frame); frame = 0; last = 0;
+    if (root.dataset.theme === 'light' && !document.hidden && !suspended) paint();
+    if (active()) frame = requestAnimationFrame(tick);
+  }
+  function resize() {
+    const rect = canvas.getBoundingClientRect();
+    // A hidden dark-mode canvas has no dimensions; retain its last valid scene.
+    if (!rect.width || !rect.height) { sync(); return; }
+    width = rect.width; height = rect.height;
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const count = Math.min(90, Math.max(26, Math.round(width * height / 15000)));
+    points = Array.from({length: count}, () => ({x: Math.random() * width, y: Math.random() * height, vx: (Math.random() - .5) * 22, vy: (Math.random() - .5) * 22, r: 1.5 + Math.random() * 1.5, phase: Math.random()}));
+    sync();
+  }
+  new MutationObserver(resize).observe(root, {attributes: true, attributeFilter: ['data-theme']});
+  addEventListener('resize', resize, {passive: true});
+  reduced.addEventListener('change', sync);
+  document.addEventListener('visibilitychange', sync);
+  addEventListener('pagehide', () => { suspended = true; sync(); });
+  addEventListener('pageshow', () => { suspended = false; resize(); });
+  resize();
+})();
