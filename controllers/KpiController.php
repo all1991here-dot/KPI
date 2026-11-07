@@ -93,10 +93,16 @@ class KpiController extends BaseController
     }
     public function actionNotifications()
     {
-        $userId=(int)$this->actor()->id;$lastRead=\app\services\Notifications::lastRead($userId);
-        $rows=\app\services\Notifications::query($userId)->select(['r.*','title'=>'a.title','status'=>'a.status','actor'=>'u.name'])->orderBy(['r.id'=>SORT_DESC])->limit(100)->all();
-        if($rows)\app\services\Notifications::markRead($userId,(int)$rows[0]['id']);
-        return $this->render('notifications',compact('rows','lastRead'));
+        $userId=(int)$this->actor()->id;$lastRead=\app\services\Notifications::lastRead($userId);$lastAssignedRead=\app\services\Notifications::lastRead($userId,true);
+        $rows=\app\services\Notifications::query($userId)->select(['r.*','title'=>'a.title','status'=>'a.status','employee_id'=>'a.employee_id','employee'=>'employee.name','route_snapshot'=>'a.route_snapshot','current_step'=>'a.step','actor'=>'u.name'])->innerJoin(['employee'=>'user'],'employee.id=a.employee_id')->orderBy(['r.id'=>SORT_DESC])->limit(100)->all();
+        $ownRead=0;$assignedRead=0;
+        foreach($rows as &$row){
+            $row['is_assignment']=(int)$row['employee_id']!==$userId;
+            $row['unread']=(int)$row['id']>($row['is_assignment']?$lastAssignedRead:$lastRead);
+            if($row['is_assignment'])$assignedRead=max($assignedRead,(int)$row['id']);else $ownRead=max($ownRead,(int)$row['id']);
+        }unset($row);
+        \app\services\Notifications::markRead($userId,$ownRead);\app\services\Notifications::markRead($userId,$assignedRead,true);
+        return $this->render('notifications',compact('rows'));
     }
     public function actionNotificationCount()
     {
