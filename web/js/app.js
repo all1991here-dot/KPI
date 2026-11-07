@@ -2,12 +2,13 @@
   'use strict';
   const root = document.documentElement;
   root.classList.add('has-js');
-  const themeKey = root.dataset.skin === 'galaxy' ? 'kpi-galaxy-theme' : 'kpi-theme';
+  const themeKey = root.dataset.skin === 'galaxy' ? 'kpi-galaxy-theme-v2' : 'kpi-theme';
   let theme = root.dataset.theme || 'light';
   try { const saved = localStorage.getItem(themeKey); if (saved === 'dark' || saved === 'light') theme = saved; } catch (_) {}
   const applyTheme = (value) => {
     theme = value;
-    root.dataset.theme = value;
+    if (root.dataset.theme !== value) root.dataset.theme = value;
+    document.querySelector('meta[name=theme-color]')?.setAttribute('content', value === 'dark' ? '#111b35' : '#eef6ff');
     document.querySelectorAll('[data-theme-toggle]').forEach(button => {
       button.setAttribute('aria-pressed', String(value === 'dark'));
       button.setAttribute('aria-label', value === 'dark' ? 'Kunduzgi rejimni yoqish' : 'Tungi rejimni yoqish');
@@ -159,7 +160,7 @@
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   let width = 0, height = 0, points = [], frame = 0, last = 0, time = 0;
   let suspended = false;
-  const active = () => !suspended && !document.hidden && root.dataset.theme === 'light' && !reduced.matches;
+  const active = () => document.body.dataset.networkMotion !== 'static' && !suspended && !document.hidden && root.dataset.theme === 'light' && !reduced.matches;
   function paint(dt = 0) {
     time += dt;
     ctx.clearRect(0, 0, width, height);
@@ -208,7 +209,7 @@
   function tick(now) {
     frame = 0;
     if (!active()) return;
-    if (!last || now - last >= 32) {
+    if (!last || now - last >= 50) {
       paint(last ? Math.min((now - last) / 1000, .08) : 0);
       last = now;
     }
@@ -223,16 +224,21 @@
     const rect = canvas.getBoundingClientRect();
     // A hidden dark-mode canvas has no dimensions; retain its last valid scene.
     if (!rect.width || !rect.height) { sync(); return; }
+    const dpr = Math.min(devicePixelRatio || 1, 1.25, Math.sqrt(1500000 / (rect.width * rect.height)));
+    if (width === rect.width && height === rect.height && canvas.width === Math.round(rect.width * dpr) && canvas.height === Math.round(rect.height * dpr)) { sync(); return; }
     width = rect.width; height = rect.height;
-    const dpr = Math.min(devicePixelRatio || 1, 2);
     canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const count = Math.min(90, Math.max(26, Math.round(width * height / 15000)));
+    const count = Math.min(48, Math.max(18, Math.round(width * height / 24000)));
     points = Array.from({length: count}, () => ({x: Math.random() * width, y: Math.random() * height, vx: (Math.random() - .5) * 22, vy: (Math.random() - .5) * 22, r: 1.5 + Math.random() * 1.5, phase: Math.random()}));
     sync();
   }
-  new MutationObserver(resize).observe(root, {attributes: true, attributeFilter: ['data-theme']});
-  addEventListener('resize', resize, {passive: true});
+  let resizeFrame = 0;
+  const scheduleResize = () => {
+    if (!resizeFrame) resizeFrame = requestAnimationFrame(() => { resizeFrame = 0; resize(); });
+  };
+  new MutationObserver(scheduleResize).observe(root, {attributes: true, attributeFilter: ['data-theme']});
+  addEventListener('resize', scheduleResize, {passive: true});
   reduced.addEventListener('change', sync);
   document.addEventListener('visibilitychange', sync);
   addEventListener('pagehide', () => { suspended = true; sync(); });

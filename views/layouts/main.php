@@ -10,18 +10,18 @@ $navigation=[['kpi/index',$personal?'Shaxsiy panel':'Boshqaruv paneli','grid'],[
 $adminNavigation=[['users','Foydalanuvchilar','users'],['structure','Universitet tuzilmasi','building'],['periods','Baholash davrlari','calendar'],['rules','Hisoblash qoidalari','settings'],['route','Tasdiqlash bosqichlari','route'],['hemis','HEMIS integratsiyasi','link'],['audit','Amallar jurnali','history']];
 if($user && $user->role==='superadmin')$adminNavigation[]=['indicators','Mezonlarni boshqarish','book'];
 $pageTitle=str_replace([' · KPI',' · FarDU KPI'],'',$this->title?:'Boshqaruv paneli');
-$assetVersion='3.4.0';
+$assetVersion='3.5.0';
 ?>
 <?php $this->beginPage() ?>
-<!doctype html><html lang="uz" data-theme="<?= $user?'dark':'light' ?>" data-skin="<?= $user?'galaxy':'auth' ?>"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#111b35">
+<!doctype html><html lang="uz" data-theme="light" data-skin="<?= $user?'galaxy':'auth' ?>"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#eef6ff">
 <title><?= Ui::h($this->title?:'KPI · Universitet') ?></title><?= Html::csrfMetaTags() ?>
 <link rel="stylesheet" href="<?= Ui::h(Yii::$app->request->baseUrl) ?>/css/app.css?v=<?= $assetVersion ?>">
 <link rel="stylesheet" href="<?= Ui::h(Yii::$app->request->baseUrl) ?>/css/design.css?v=<?= $assetVersion ?>">
 <link rel="stylesheet" href="<?= Ui::h(Yii::$app->request->baseUrl) ?>/css/academic.css?v=<?= $assetVersion ?>">
 <?php if($user): ?><link rel="stylesheet" href="<?= Ui::h(Yii::$app->request->baseUrl) ?>/css/galaxy.css?v=<?= $assetVersion ?>"><?php endif ?>
 <script src="<?= Ui::h(Yii::$app->request->baseUrl) ?>/js/app.js?v=<?= $assetVersion ?>" defer></script>
-<?php $this->head() ?></head><body class="<?= $user?'academic-app galaxy-app':'academic-auth' ?>"><?php $this->beginBody() ?>
+<?php $this->head() ?></head><body data-network-motion="<?= $user && $user->isAdmin()?'static':'animated' ?>" class="<?= $user?'academic-app galaxy-app':'academic-auth' ?>"><?php $this->beginBody() ?>
 <?php if($user): ?>
 <a class="skip-link" href="#main">Asosiy qismga o‘tish</a>
 <aside class="sidebar" id="app-sidebar" aria-label="Asosiy menyu">

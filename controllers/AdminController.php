@@ -17,7 +17,12 @@ class AdminController extends BaseController
         if($search!=='')$q->andWhere(['or',['like','name',$search],['like','username',$search]]);
         $status=(string)Yii::$app->request->get('status','');if(in_array($status,['active','inactive'],true))$q->andWhere(['active'=>$status==='active'?1:0]);
         $org=(int)Yii::$app->request->get('org',0);if($org){$all=(new Query())->from('org')->all();$ids=[$org];do{$before=count($ids);foreach($all as $r)if(in_array((int)$r['parent_id'],$ids,true) && !in_array((int)$r['id'],$ids,true))$ids[]=(int)$r['id'];}while(count($ids)>$before);$q->andWhere(['org_id'=>$ids]);}
-        return $this->render('users',['rows'=>$q->orderBy('name')->all(),'orgs'=>(new Query())->from('org')->orderBy('name')->all(),'archivedHemisCount'=>(int)User::find()->where(['not',['deleted_at'=>null]])->andWhere(['not',['hemis_id'=>null]])->count()]);
+        $roleCounts=array_column((clone $q)->select(['role','n'=>'COUNT(*)'])->groupBy('role')->asArray()->all(),'n','role');
+        $selectedRole=(string)Yii::$app->request->get('role','');if($selectedRole!=='' && !isset(User::ROLES[$selectedRole]))throw new \yii\web\BadRequestHttpException('Rol noto‘g‘ri.');
+        if($selectedRole!=='')$q->andWhere(['role'=>$selectedRole]);
+        $total=(int)(clone $q)->count();$page=min(max(1,(int)Yii::$app->request->get('page',1)),max(1,(int)ceil($total/50)));
+        $rows=$q->select(['id','name','username','role','category','active','org_id'])->orderBy(['role'=>SORT_ASC,'name'=>SORT_ASC,'id'=>SORT_ASC])->limit(50)->offset(($page-1)*50)->all();
+        return $this->render('users',compact('rows','selectedRole','roleCounts','total','page')+['orgs'=>(new Query())->from('org')->orderBy('name')->all(),'archivedHemisCount'=>(int)User::find()->where(['not',['deleted_at'=>null]])->andWhere(['not',['hemis_id'=>null]])->count()]);
     }
     public function actionUserEdit(?int $id=null)
     {

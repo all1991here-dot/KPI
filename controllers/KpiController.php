@@ -72,16 +72,8 @@ class KpiController extends BaseController
     }
     public function actionEmployeePhoto(int $id)
     {
-        if(!$this->actor()->isAdmin() && $id!==(int)$this->actor()->id)throw new \yii\web\NotFoundHttpException();
-        $person=\app\models\User::findOne(['id'=>$id,'deleted_at'=>null]);if(!$person)throw new \yii\web\NotFoundHttpException();
-        $check=Yii::$app->request->get('check')==='1';
-        if($check && !$this->actor()->isAdmin())throw new \yii\web\ForbiddenHttpException();
-        if($check){
-            try{$path=\app\services\HemisPhoto::file($person,true);return $this->asJson(['ok'=>true,'message'=>'Rasm yuklandi.','url'=>\yii\helpers\Url::to(['kpi/employee-photo','id'=>$id])]);}
-            catch(\Throwable $e){return $this->asJson(['ok'=>false,'message'=>$e instanceof \DomainException?$e->getMessage():'Rasmni tekshirishda xato.']);}
-        }
-        try{$path=\app\services\HemisPhoto::file($person);}catch(\Throwable $e){throw new \yii\web\NotFoundHttpException('Rasm yo‘q.');}
-        return Yii::$app->response->sendFile($path,'employee-photo',['mimeType'=>(new \finfo(FILEINFO_MIME_TYPE))->file($path),'inline'=>true]);
+        // Staff photos are disabled to keep local PHP requests free of remote image fetches.
+        throw new \yii\web\NotFoundHttpException('Xodim rasmlarini yuklash o‘chirilgan.');
     }
     public function actionCriteria()
     {

@@ -37,12 +37,9 @@ with sync_playwright() as p:
     assert page.locator('[name=org_id]').input_value()==dept
     assert page.locator('[data-org-level=faculty]').input_value()==faculty
     page.goto(base+teacher_link,wait_until='networkidle')
-    image=page.locator('[data-employee-photo]').first;image.scroll_into_view_if_needed();page.wait_for_timeout(300)
-    assert image.evaluate('(e)=>e.complete && e.naturalWidth>0')
+    assert page.locator('[data-employee-photo]').count()==0
     assert page.locator('[name="profile[email]"]').input_value()=='teacher@example.test'
     page.screenshot(path=str(out/'employee-profile.png'),full_page=True)
-    image.evaluate('(e)=>{e.dispatchEvent(new Event("error"));e.dispatchEvent(new Event("error"));}');assert image.is_hidden()
-    assert page.get_by_text('Rasm yo‘q').count()
     goto('auth/logout') if False else None
     context.clear_cookies();login('operator');page.goto(base+teacher_link,wait_until='networkidle')
     assert not page.locator('[name=role]').count()
@@ -54,9 +51,11 @@ with sync_playwright() as p:
     page.wait_for_load_state('networkidle');assert 'faqat superadministrator' in page.locator('.alert.error').inner_text()
     context.clear_cookies();login('admin');page.goto(base+teacher_link,wait_until='networkidle')
     assert page.locator('[name=role]').input_value()=='teacher'
-    # Edit the already approved HTTP test document as an ordinary administrator.
+    # Ordinary administrators cannot edit an approved document; the superadmin can.
     goto('kpi/applications');edit_link=page.locator('a[href*="kpi%2Fview"]').first.get_attribute('href')
     context.clear_cookies();login('operator');page.goto(base+edit_link,wait_until='networkidle')
+    assert not page.get_by_role('link',name='Tahrirlash',exact=True).count()
+    context.clear_cookies();login('admin');page.goto(base+edit_link,wait_until='networkidle')
     page.get_by_role('link',name='Tahrirlash',exact=True).click();page.wait_for_load_state('networkidle')
     page.locator('[name=title]').fill('Admin UI corrected document');page.get_by_role('button',name='Qoralamani saqlash',exact=True).click();page.wait_for_load_state('networkidle')
     assert 'Qoralama' in page.locator('body').inner_text()
@@ -64,4 +63,4 @@ with sync_playwright() as p:
     response=page.goto(base+'?r=kpi/create',wait_until='networkidle');assert response.status==403
     assert not errors,errors
     browser.close()
-print('PASS: manual hierarchy, cascaded user assignment persists, imported profile/photo and fallback, admin role POST rejected, admin document edit, unassigned access denied.')
+print('PASS: manual hierarchy, cascaded user assignment persists, imported profile without portraits, admin role POST rejected, superadmin document edit, unassigned access denied.')

@@ -10,7 +10,8 @@ with sync_playwright() as p:
     page=context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
     page.goto(base+'?r=auth/login',wait_until='networkidle');assert not page.locator('link[href*="galaxy.css"]').count()
     page.locator('[name=username]').fill('http_admin');page.locator('[name=password]').fill('OnlyForIsolated-HttpTests2026!');page.locator('.login-card button.button').click();page.wait_for_load_state('networkidle')
-    assert page.locator('html').get_attribute('data-theme')=='dark'
+    assert page.locator('html').get_attribute('data-theme')=='light'
+    page.locator('[data-theme-toggle]').click();assert page.locator('html').get_attribute('data-theme')=='dark'
     assert page.locator('body').evaluate('(e)=>getComputedStyle(e).backgroundColor')=='rgb(7, 19, 38)'
     assert page.locator('.topbar').evaluate('(e)=>getComputedStyle(e).backgroundColor')!='rgb(255, 255, 255)'
     page.screenshot(path=str(out/'dashboard-desktop.png'),full_page=True)
@@ -29,4 +30,4 @@ with sync_playwright() as p:
     page.emulate_media(media='print');assert page.locator('.galaxy-horizon').evaluate('(e)=>getComputedStyle(e).display')=='none'
     assert not errors,errors
     browser.close()
-print('PASS: dark default, readable surfaces, mode persistence, six internal screens, mobile menu/overflow, print and no JS errors.')
+print('PASS: light default, readable surfaces, mode persistence, six internal screens, mobile menu/overflow, print and no JS errors.')
