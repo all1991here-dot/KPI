@@ -7,12 +7,10 @@ use app\services\Catalog;
 use app\services\Workflow;
 class KpiController extends BaseController
 {
-    private function scoped(): Query
+    private function scoped(bool $reviewQueue=false): Query
     {
         $q=(new Query())->from(['a'=>'application'])->innerJoin(['u'=>'user'],'u.id=a.employee_id')->innerJoin(['i'=>'indicator'],'i.id=a.indicator_id')->innerJoin(['p'=>'period'],'p.id=a.period_id');
-        $ids=Access::employeeIds($this->actor());if($ids!==null)$q->andWhere(['a.employee_id'=>$ids]);
-        if(!$this->actor()->isAdmin())$q->andWhere(['or',['<>','a.status','draft'],['a.employee_id'=>$this->actor()->id]]);
-        return $q;
+        return Access::scope($q,$this->actor(),$reviewQueue);
     }
     public function actionIndex()
     {
@@ -28,12 +26,12 @@ class KpiController extends BaseController
     }
     public function actionApplications()
     {
-        $q=$this->scoped();$request=Yii::$app->request;
+        $request=Yii::$app->request;$q=$this->scoped((bool)$request->get('queue'));
         if($request->get('mine'))$q->andWhere(['a.employee_id'=>$this->actor()->id]);
         foreach(['status'=>'a.status','period'=>'a.period_id','category'=>'a.category'] as $key=>$column)if($request->get($key)!==null && $request->get($key)!=='')$q->andWhere([$column=>$request->get($key)]);
         $search=mb_substr(trim((string)$request->get('q','')),0,200);if($request->get('appeals'))$q->andWhere(['exists',(new Query())->from(['appeal_review'=>'review'])->where('appeal_review.application_id=a.id')->andWhere(['appeal_review.action'=>'appeal'])]);if($search!=='')$q->andWhere(['or',['like','a.title',$search],['like','u.name',$search],['like','i.code',$search]]);
         if($request->get('queue')){
-            $q->andWhere(['a.status'=>['submitted','review']]);
+            $q->andWhere(['a.status'=>['submitted','review'],'p.closed'=>0]);
             $all=$q->select(['a.*','employee'=>'u.name','indicator'=>'i.name','period'=>'p.name'])->orderBy(['a.created_at'=>SORT_ASC])->all();
             $all=array_values(array_filter($all,function($a){$steps=json_decode($a['route_snapshot']??'[]',true);$s=$steps[(int)$a['step']]??null;return $s && (int)$a['employee_id']!==(int)$this->actor()->id && in_array($this->actor()->role,json_decode($s['roles'],true),true);}));
             $total=count($all);$page=max(1,(int)$request->get('page',1));$rows=array_slice($all,($page-1)*25,25);
@@ -59,7 +57,7 @@ class KpiController extends BaseController
     }
     public function actionAct(int $id)
     {
-        $this->postOnly();try{Workflow::act($this->actor(),$id,(string)Yii::$app->request->post('action'),(string)Yii::$app->request->post('reason',''),Yii::$app->request->post('expert_score'));Yii::$app->session->setFlash('success','Ariza holati yangilandi.');}catch(\Throwable $e){$this->message($e);}return $this->redirect(['view','id'=>$id]);
+        $this->postOnly();try{Workflow::act($this->actor(),$id,(string)Yii::$app->request->post('action'),(string)Yii::$app->request->post('reason',''),Yii::$app->request->post('expert_score'));Yii::$app->session->setFlash('success','Ariza holati yangilandi.');if($this->actor()->role==='expert' && !Access::canView($this->actor(),Workflow::application($id)))return $this->redirect(['applications','queue'=>1]);}catch(\Throwable $e){$this->message($e);}return $this->redirect(['view','id'=>$id]);
     }
     public function actionDeleteEvidence(int $id)
     {
@@ -112,7 +110,7 @@ class KpiController extends BaseController
     public function actionProfile(){return $this->render('profile',['user'=>$this->actor(),'org'=>(new Query())->from('org')->where(['id'=>$this->actor()->org_id])->one()]);}
     public function actionReports()
     {
-        $q=$this->scoped();$request=Yii::$app->request;$personal=$this->actor()->role==='teacher';
+        $request=Yii::$app->request;$q=$this->scoped((bool)$request->get('queue'));$personal=$this->actor()->role==='teacher';
         foreach(($personal?['period'=>'a.period_id']:['period'=>'a.period_id','category'=>'a.category','employee'=>'a.employee_id']) as $key=>$column)if($request->get($key)!==null && $request->get($key)!=='')$q->andWhere([$column=>$request->get($key)]);
         if(!$personal && $request->get('org')){
             $orgId=(int)$request->get('org');$orgs=(new Query())->select('id')->from('org')->where(['or',['id'=>$orgId],['parent_id'=>$orgId]])->column();
@@ -121,7 +119,7 @@ class KpiController extends BaseController
         $activityQuery=clone $q;
         $q->andWhere(['a.status'=>'approved']);
         $q->leftJoin(['o'=>'org'],'o.id=u.org_id')->leftJoin(['f'=>'org'],'f.id=o.parent_id');
-        $group=$personal?'employee':(string)$request->get('group','employee');if(!in_array($group,['employee','department','unit','faculty','university'],true))$group='employee';
+        $group=$personal?'employee':(string)$request->get('group','employee');if(!Access::isGlobal($this->actor()) && $group==='university')$group='employee';if(!in_array($group,['employee','department','unit','faculty','university'],true))$group='employee';
         if($group==='employee'){$q->select(['employee_id'=>'u.id','employee'=>'u.name','category'=>'a.category','org'=>'o.name','score_cents'=>'SUM(a.score_cents)','applications'=>'COUNT(*)'])->groupBy(['u.id','u.name','a.category','o.name']);}
         elseif(in_array($group,['department','unit'],true)){$q->andWhere($group==='department'?['o.kind'=>'department','o.type_verified'=>1]:['or',['o.kind'=>'unit'],['o.type_verified'=>0]]);$q->select(['employee_id'=>'o.id','employee'=>'o.name','category'=>new \yii\db\Expression("''"),'org'=>'f.name','score_cents'=>'SUM(a.score_cents)','applications'=>'COUNT(*)'])->groupBy(['o.id','o.name','f.name']);}
         elseif($group==='faculty'){$name=new \yii\db\Expression("CASE WHEN o.kind='faculty' AND o.type_verified=1 THEN o.name WHEN f.kind='faculty' AND f.type_verified=1 THEN f.name ELSE 'Fakultetga biriktirilmagan' END");$key=new \yii\db\Expression("CASE WHEN o.kind='faculty' AND o.type_verified=1 THEN o.id WHEN f.kind='faculty' AND f.type_verified=1 THEN f.id ELSE 0 END");$q->select(['employee_id'=>$key,'employee'=>$name,'category'=>new \yii\db\Expression("''"),'org'=>new \yii\db\Expression("''"),'score_cents'=>'SUM(a.score_cents)','applications'=>'COUNT(*)'])->groupBy([$key,$name]);}
@@ -134,6 +132,8 @@ class KpiController extends BaseController
         }
         $activityPage=max(1,(int)$request->get('activity_page',1));$activityTotal=(int)(clone $activityQuery)->count();$activityPage=min($activityPage,max(1,(int)ceil($activityTotal/25)));
         $activityRows=$activityQuery->select(['a.*','employee'=>'u.name','indicator'=>'i.name','period'=>'p.name'])->orderBy(['a.updated_at'=>SORT_DESC,'a.id'=>SORT_DESC])->limit(25)->offset(($activityPage-1)*25)->all();
-        return $this->render('reports',compact('activityRows','activityTotal','activityPage')+['rows'=>$rows,'group'=>$group,'periods'=>(new Query())->from('period')->orderBy(['starts'=>SORT_DESC])->all(),'orgs'=>$personal?[]:(new Query())->from('org')->orderBy('name')->all()]);
+        $orgQuery=(new Query())->from('org')->orderBy('name');
+        if(!Access::isGlobal($this->actor()))$orgQuery->where(['or',['id'=>$this->actor()->org_id],['id'=>$this->scoped()->select('u.org_id')->distinct()]]);
+        return $this->render('reports',compact('activityRows','activityTotal','activityPage')+['rows'=>$rows,'group'=>$group,'periods'=>(new Query())->from('period')->orderBy(['starts'=>SORT_DESC])->all(),'orgs'=>$personal?[]:$orgQuery->all()]);
     }
 }

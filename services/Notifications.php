@@ -16,7 +16,7 @@ class Notifications
         if(!$actor || !$actor->canReview())return [];
         $latest=(new Query())->from('review')->select(['application_id','event_id'=>'MAX(id)'])->groupBy('application_id');
         $query=(new Query())->from(['a'=>'application'])->innerJoin(['latest'=>$latest],'latest.application_id=a.id')->innerJoin(['period'=>'period'],'period.id=a.period_id')->select(['a.*','event_id'=>'latest.event_id'])->where(['a.status'=>['submitted','review'],'period.closed'=>0])->andWhere(['<>','a.employee_id',$userId]);
-        $employees=Access::employeeIds($actor);if($employees!==null)$query->andWhere(['a.employee_id'=>$employees]);
+        $employees=Access::reviewEmployeeIds($actor);if($employees!==null)$query->andWhere(['a.employee_id'=>$employees]);
         $ids=[];
         foreach($query->all() as $application){
             $steps=json_decode($application['route_snapshot']??'[]',true);$step=$steps[(int)$application['step']]??null;
