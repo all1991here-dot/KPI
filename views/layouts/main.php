@@ -9,7 +9,7 @@ $navigation=[['kpi/index','Boshqaruv paneli','grid'],['kpi/create','Yangi faoliy
 $adminNavigation=[['users','Foydalanuvchilar','users'],['structure','Universitet tuzilmasi','building'],['periods','Baholash davrlari','calendar'],['rules','Hisoblash qoidalari','settings'],['route','Tasdiqlash bosqichlari','route'],['hemis','HEMIS integratsiyasi','link'],['audit','Amallar jurnali','history']];
 if($user && $user->role==='superadmin')$adminNavigation[]=['indicators','Mezonlarni boshqarish','book'];
 $pageTitle=str_replace([' · KPI',' · FarDU KPI'],'',$this->title?:'Boshqaruv paneli');
-$assetVersion='3.1.0';
+$assetVersion='3.1.1';
 ?>
 <?php $this->beginPage() ?>
 <!doctype html><html lang="uz" data-theme="<?= $user?'dark':'light' ?>" data-skin="<?= $user?'galaxy':'auth' ?>"><head>
