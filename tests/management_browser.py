@@ -12,13 +12,42 @@ with sync_playwright() as p:
     def login(name):
         goto('auth/login');page.locator('[name=username]').fill('http_'+name);page.locator('[name=password]').fill(password);page.locator('.login-card button.button').click();page.wait_for_load_state('networkidle')
     login('admin');goto('admin/indicators')
+    assert not page.locator('[name=code]').count()
+    assert not page.get_by_role('button',name='O‘chirish',exact=True).count()
+    page.get_by_role('link',name='Yangi mezon',exact=True).click();page.wait_for_load_state('networkidle')
+    assert 'indicator-edit' in page.url
+    assert not page.get_by_role('button',name='O‘chirish',exact=True).count()
     for key,value in {'code':'BROWSER-CUSTOM','name':'Browser custom KPI','section':'BROWSER','section_name':'Browser direction','criterion_code':'BROWSER-1','criterion_name':'Browser condition','base_score':'3'}.items():page.locator(f'[name={key}]').fill(value)
-    page.get_by_role('button',name='Mezonni saqlash',exact=True).click();page.wait_for_load_state('networkidle')
+    page.get_by_role('button',name='Saqlash',exact=True).click();page.wait_for_load_state('networkidle')
+    edit_url=page.url
+    assert 'indicator-edit' in edit_url and 'id=' in edit_url
+    assert page.locator('[name=name]').input_value()=='Browser custom KPI'
+    assert page.get_by_role('button',name='O‘chirish',exact=True).count()==1
+    # Invalid input stays on the editor and preserves entered values and checkbox state.
+    page.locator('[name=code]').fill('INVALID CODE')
+    page.locator('[name=policy_required][type=checkbox]').uncheck()
+    page.get_by_role('button',name='Saqlash',exact=True).click();page.wait_for_load_state('networkidle')
+    assert page.url==edit_url and page.locator('[name=code]').input_value()=='INVALID CODE'
+    assert not page.locator('[name=policy_required][type=checkbox]').is_checked()
+    page.locator('[name=code]').fill('BROWSER-CUSTOM')
+    page.locator('[name=name]').fill('Browser edited KPI')
+    page.get_by_role('button',name='Saqlash',exact=True).click();page.wait_for_load_state('networkidle')
+    page.get_by_role('link',name='← Mezonlarga qaytish',exact=True).click();page.wait_for_load_state('networkidle')
     row=page.locator('tbody tr').filter(has_text='BROWSER-CUSTOM');assert row.count()==1
-    row.get_by_role('link',name='Tahrirlash').click();page.wait_for_load_state('networkidle');page.locator('[name=name]').fill('Browser edited KPI');page.get_by_role('button',name='Mezonni saqlash',exact=True).click();page.wait_for_load_state('networkidle')
-    assert page.locator('tbody tr').filter(has_text='Browser edited KPI').count()==1
-    page.screenshot(path=str(out/'indicators.png'),full_page=True)
-    page.locator('tbody tr').filter(has_text='BROWSER-CUSTOM').get_by_role('button',name='O‘chirish').click();page.wait_for_load_state('networkidle');assert not page.locator('tbody tr').filter(has_text='BROWSER-CUSTOM').count()
+    assert 'Browser edited KPI' in row.inner_text()
+    row.get_by_role('link',name='Tahrirlash').click();page.wait_for_load_state('networkidle')
+    assert page.url==edit_url and not page.locator('tbody tr').count()
+    page.set_viewport_size({'width':390,'height':844})
+    assert page.evaluate('document.documentElement.scrollWidth<=innerWidth+1')
+    page.wait_for_timeout(350)
+    page.screenshot(path=str(out/'indicator-editor-mobile.png'),full_page=True)
+    page.set_viewport_size({'width':1440,'height':1050})
+    # Delete is a separate form, so unrelated invalid unsaved fields cannot block deletion.
+    page.locator('[name=name]').fill('')
+    page.get_by_role('button',name='O‘chirish',exact=True).click();page.wait_for_load_state('networkidle')
+    assert 'indicator-edit' not in page.url
+    assert not page.locator('tbody tr').filter(has_text='BROWSER-CUSTOM').count()
+    assert page.goto(edit_url,wait_until='networkidle').status==404
     goto('admin/structure-edit&kind=university');page.locator('[name=name]').fill('Browser delete university');page.get_by_role('button',name='Saqlash',exact=True).click();page.wait_for_load_state('networkidle')
     page.get_by_role('button',name='O‘chirish',exact=True).click();page.wait_for_load_state('networkidle');assert not page.locator('tbody tr').filter(has_text='Browser delete university').count()
     goto('admin/user-edit')
@@ -34,11 +63,13 @@ with sync_playwright() as p:
     assert not page.get_by_role('button',name='O‘chirish').count()
     goto('admin/structure');assert not page.locator('[name=name]').count();assert not page.get_by_role('button',name='O‘chirish').count()
     assert goto('admin/indicators').status==403
+    assert goto('admin/indicator-edit').status==403
     goto('admin/hemis');assert not page.get_by_role('button',name='Xodimlarni import qilish').count()
     # CSRF-valid POST must still fail server authorization.
     token=page.locator('meta[name=csrf-token]').get_attribute('content')
     csrf=page.locator('meta[name=csrf-param]').get_attribute('content')
     for route,data in [
+        ('admin/indicator-edit',{'operation':'delete'}),
         ('admin/users',{'username':'forged_user','name':'Forged user','password':password}),
         ('admin/structure',{'name':'Forged org','kind':'university'}),
         ('admin/delete-user&id='+target_id,{}),('admin/delete-structure&id=1',{}),
@@ -48,4 +79,4 @@ with sync_playwright() as p:
         response=context.request.post(base+'?r='+route,form={csrf:token,**data});assert response.status==403,(route,response.status)
     assert not errors,errors
     browser.close()
-print('PASS: superadmin adds/edits/deletes criteria, adds/deletes structure and employee; admin controls hidden and eight forged POST paths rejected.')
+print('PASS: superadmin adds/edits/deletes criteria, adds/deletes structure and employee; admin controls hidden and nine forged POST paths rejected.')

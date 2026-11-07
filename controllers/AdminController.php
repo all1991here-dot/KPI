@@ -101,10 +101,30 @@ class AdminController extends BaseController
     }
     public function actionIndicators(?int $id=null)
     {
-        \app\services\Management::authorize($this->actor());$edit=$id?(new Query())->from('indicator')->where(['id'=>$id,'deleted_at'=>null])->one():null;
+        \app\services\Management::authorize($this->actor());
+        if($id){if(Yii::$app->request->isPost)return $this->actionIndicatorEdit($id);return $this->redirect(['indicator-edit','id'=>$id]);}
+        if(Yii::$app->request->isPost)return $this->actionIndicatorEdit();
+        return $this->render('indicators',['rows'=>(new Query())->from('indicator')->where(['deleted_at'=>null])->orderBy(['category'=>SORT_ASC,'id'=>SORT_ASC])->all()]);
+    }
+    public function actionIndicatorEdit(?int $id=null)
+    {
+        \app\services\Management::authorize($this->actor());
+        $edit=$id?(new Query())->from('indicator')->where(['id'=>$id,'deleted_at'=>null])->one():null;
         if($id && !$edit)throw new \yii\web\NotFoundHttpException();
-        if(Yii::$app->request->isPost){try{if(Yii::$app->request->post('operation')==='delete'){if(!$id)throw new DomainException('Mezon tanlanmagan.');\app\services\Management::deleteIndicator($this->actor(),$id);}else \app\services\Management::saveIndicator($this->actor(),Yii::$app->request->post(),$id);Yii::$app->session->setFlash('success','Mezonlar katalogi yangilandi. Davr ballari alohida hisoblash qoidalarida boshqariladi.');return $this->redirect(['indicators']);}catch(\Throwable $e){$this->message($e);}}
-        return $this->render('indicators',['edit'=>$edit,'rows'=>(new Query())->from('indicator')->where(['deleted_at'=>null])->orderBy(['category'=>SORT_ASC,'id'=>SORT_ASC])->all()]);
+        if(Yii::$app->request->isPost){try{
+            $operation=(string)Yii::$app->request->post('operation','save');
+            if($operation==='delete'){
+                if(!$id)throw new DomainException('Mezon tanlanmagan.');
+                \app\services\Management::deleteIndicator($this->actor(),$id);
+                Yii::$app->session->setFlash('success','Mezon o‘chirildi. Oldingi hujjat va ballar tarixi saqlandi.');
+                return $this->redirect(['indicators']);
+            }
+            if($operation!=='save')throw new DomainException('Amal noto‘g‘ri.');
+            $saved=\app\services\Management::saveIndicator($this->actor(),Yii::$app->request->post(),$id);
+            Yii::$app->session->setFlash('success','Mezon saqlandi. Davr ballari alohida hisoblash qoidalarida boshqariladi.');
+            return $this->redirect(['indicator-edit','id'=>$saved]);
+        }catch(\Throwable $e){if($e instanceof \yii\web\ForbiddenHttpException)throw $e;$this->message($e);}}
+        return $this->render('indicator-edit',['edit'=>$edit]);
     }
     public function actionPeriods(?int $id=null)
     {
