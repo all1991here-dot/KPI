@@ -57,9 +57,9 @@ with sync_playwright() as p:
         params={'group':group,'employee':2,'org':4,'category':'DSC'}
         assert goto('kpi/reports',**params).status==200
         assert not page.locator('[name=group],[name=org],[name=category]').count()
-        assert page.locator('tbody tr').count()==1
-        assert 'HTTP teacher' in page.locator('tbody').inner_text()
-        assert '15.00' in page.locator('tbody').inner_text()
+        assert page.locator('.report-results tbody tr').count()==1
+        assert 'HTTP teacher' in page.locator('.report-results tbody').inner_text()
+        assert '15.00' in page.locator('.report-results tbody').inner_text()
         assert 'PRIVATE-OTHER' not in page.content()
         response=context.request.get(url('kpi/reports',format='csv',**params));assert response.status==200
         rows=list(csv.reader(io.StringIO(response.body().decode('utf-8-sig'))))
@@ -83,7 +83,7 @@ with sync_playwright() as p:
     assert 'Bo‘limlar reytingi' in page.locator('#main').inner_text()
     goto('kpi/reports',group='university')
     assert page.locator('[name=group]').count()==1
-    assert '114.00' in page.locator('tbody').inner_text()
+    assert '114.00' in page.locator('.report-results tbody').inner_text()
     goto('kpi/criteria',category='DSC')
     assert page.locator('[name=category]').count()==1
     assert all(code.startswith('DSC-') for code in page.locator('.criterion .eyebrow').all_inner_texts())

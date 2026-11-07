@@ -93,18 +93,26 @@ class KpiController extends BaseController
     }
     public function actionNotifications()
     {
-        $rows=(new Query())->select(['r.*','title'=>'a.title','actor'=>'u.name'])->from(['r'=>'review'])->innerJoin(['a'=>'application'],'a.id=r.application_id')->innerJoin(['u'=>'user'],'u.id=r.actor_id')->where(['a.employee_id'=>$this->actor()->id])->andWhere(['<>','r.actor_id',$this->actor()->id])->orderBy(['r.id'=>SORT_DESC])->limit(100)->all();
-        return $this->render('notifications',['rows'=>$rows]);
+        $userId=(int)$this->actor()->id;$lastRead=\app\services\Notifications::lastRead($userId);
+        $rows=\app\services\Notifications::query($userId)->select(['r.*','title'=>'a.title','status'=>'a.status','actor'=>'u.name'])->orderBy(['r.id'=>SORT_DESC])->limit(100)->all();
+        if($rows)\app\services\Notifications::markRead($userId,(int)$rows[0]['id']);
+        return $this->render('notifications',compact('rows','lastRead'));
+    }
+    public function actionNotificationCount()
+    {
+        return $this->asJson(['unread'=>\app\services\Notifications::unreadCount((int)$this->actor()->id)]);
     }
     public function actionProfile(){return $this->render('profile',['user'=>$this->actor(),'org'=>(new Query())->from('org')->where(['id'=>$this->actor()->org_id])->one()]);}
     public function actionReports()
     {
-        $q=$this->scoped()->andWhere(['a.status'=>'approved']);$request=Yii::$app->request;$personal=$this->actor()->role==='teacher';
+        $q=$this->scoped();$request=Yii::$app->request;$personal=$this->actor()->role==='teacher';
         foreach(($personal?['period'=>'a.period_id']:['period'=>'a.period_id','category'=>'a.category','employee'=>'a.employee_id']) as $key=>$column)if($request->get($key)!==null && $request->get($key)!=='')$q->andWhere([$column=>$request->get($key)]);
         if(!$personal && $request->get('org')){
             $orgId=(int)$request->get('org');$orgs=(new Query())->select('id')->from('org')->where(['or',['id'=>$orgId],['parent_id'=>$orgId]])->column();
             $children=(new Query())->select('id')->from('org')->where(['parent_id'=>$orgs])->column();$q->andWhere(['u.org_id'=>array_merge($orgs,$children)]);
         }
+        $activityQuery=clone $q;
+        $q->andWhere(['a.status'=>'approved']);
         $q->leftJoin(['o'=>'org'],'o.id=u.org_id')->leftJoin(['f'=>'org'],'f.id=o.parent_id');
         $group=$personal?'employee':(string)$request->get('group','employee');if(!in_array($group,['employee','department','unit','faculty','university'],true))$group='employee';
         if($group==='employee'){$q->select(['employee_id'=>'u.id','employee'=>'u.name','category'=>'a.category','org'=>'o.name','score_cents'=>'SUM(a.score_cents)','applications'=>'COUNT(*)'])->groupBy(['u.id','u.name','a.category','o.name']);}
@@ -117,6 +125,8 @@ class KpiController extends BaseController
             $table=[[$personal?'№':'O‘rin',$personal?'Xodim':'Xodim / bo‘lim','Toifa','Yuqori bo‘lim','Ball','Tasdiqlangan arizalar']];foreach($rows as $i=>$row)$table[]=[$i+1,$row['employee']??'Belgilanmagan',Catalog::CATEGORIES[$row['category']]??$row['category'],$row['org']??'',number_format($row['score_cents']/100,2,'.',''),$row['applications']];
             return \app\services\Export::download($table,(string)$request->get('format'));
         }
-        return $this->render('reports',['rows'=>$rows,'group'=>$group,'periods'=>(new Query())->from('period')->orderBy(['starts'=>SORT_DESC])->all(),'orgs'=>$personal?[]:(new Query())->from('org')->orderBy('name')->all()]);
+        $activityPage=max(1,(int)$request->get('activity_page',1));$activityTotal=(int)(clone $activityQuery)->count();$activityPage=min($activityPage,max(1,(int)ceil($activityTotal/25)));
+        $activityRows=$activityQuery->select(['a.*','employee'=>'u.name','indicator'=>'i.name','period'=>'p.name'])->orderBy(['a.updated_at'=>SORT_DESC,'a.id'=>SORT_DESC])->limit(25)->offset(($activityPage-1)*25)->all();
+        return $this->render('reports',compact('activityRows','activityTotal','activityPage')+['rows'=>$rows,'group'=>$group,'periods'=>(new Query())->from('period')->orderBy(['starts'=>SORT_DESC])->all(),'orgs'=>$personal?[]:(new Query())->from('org')->orderBy('name')->all()]);
     }
 }

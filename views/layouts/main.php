@@ -10,7 +10,7 @@ $navigation=[['kpi/index',$personal?'Shaxsiy panel':'Boshqaruv paneli','grid'],[
 $adminNavigation=[['users','Foydalanuvchilar','users'],['structure','Universitet tuzilmasi','building'],['periods','Baholash davrlari','calendar'],['rules','Hisoblash qoidalari','settings'],['route','Tasdiqlash bosqichlari','route'],['hemis','HEMIS integratsiyasi','link'],['audit','Amallar jurnali','history']];
 if($user && $user->role==='superadmin')$adminNavigation[]=['indicators','Mezonlarni boshqarish','book'];
 $pageTitle=str_replace([' · KPI',' · FarDU KPI'],'',$this->title?:'Boshqaruv paneli');
-$assetVersion='3.3.0';
+$assetVersion='3.4.0';
 ?>
 <?php $this->beginPage() ?>
 <!doctype html><html lang="uz" data-theme="<?= $user?'dark':'light' ?>" data-skin="<?= $user?'galaxy':'auth' ?>"><head>
@@ -48,7 +48,8 @@ $assetVersion='3.3.0';
 <div class="topbar-location"><button class="icon-button mobile-menu" type="button" data-menu-toggle aria-controls="app-sidebar" aria-expanded="false" aria-label="Menyuni ochish"><?= Ui::icon('menu') ?></button><div class="breadcrumbs"><?= Ui::icon('building') ?><span>Ish maydoni</span><span class="crumb-divider">/</span><b><?= Ui::h($pageTitle) ?></b></div></div>
 <div class="topbar-actions"><?= Html::beginForm(['kpi/applications'],'get',['class'=>'header-search','role'=>'search']) ?><label><?= Ui::icon('search') ?><span class="sr-only">Arizalarni qidirish</span><input type="search" name="q" placeholder="Arizalarni qidirish…" autocomplete="off" aria-label="Arizalarni qidirish"></label><?= Html::endForm() ?>
 <button class="icon-button theme-toggle" type="button" data-theme-toggle aria-label="Tungi rejimni yoqish" aria-pressed="false"><span class="theme-moon"><?= Ui::icon('moon') ?></span><span class="theme-sun"><?= Ui::icon('sun') ?></span></button>
-<?= Html::a(Ui::icon('bell'),['kpi/notifications'],['class'=>'icon-button notification-button','aria-label'=>'Bildirishnomalar']) ?>
+<?php $unread=\app\services\Notifications::unreadCount((int)$user->id); ?>
+<a class="icon-button notification-button" href="<?= Ui::h(Url::to(['kpi/notifications'])) ?>" data-notification-url="<?= Ui::h(Url::to(['kpi/notification-count'])) ?>" aria-label="Bildirishnomalar: <?= $unread ?> ta o‘qilmagan"><?= Ui::icon('bell') ?><span class="notification-count" data-notification-count<?= $unread?'':' hidden' ?> aria-live="polite"><?= $unread>99?'99+':$unread ?></span></a>
 <div class="account"><?= Html::a('<span class="avatar">'.Ui::h(mb_substr($user->name,0,1)).'</span><span class="account-info"><b>'.Ui::h($user->name).'</b><small>'.Ui::h(User::ROLES[$user->role]??$user->role).'</small></span>',['kpi/profile'],['class'=>'account-profile']) ?><?= Html::beginForm(['auth/logout'],'post') ?><button class="icon-button logout-button" title="Chiqish" aria-label="Tizimdan chiqish"><?= Ui::icon('logout') ?></button><?= Html::endForm() ?></div></div></header>
 <main id="main" tabindex="-1"><?php foreach(Yii::$app->session->getAllFlashes() as $type=>$message): ?><div role="alert" class="alert <?= Ui::h($type) ?>"><?= Ui::h($message) ?></div><?php endforeach ?><?= $content ?></main>
 <footer class="footer"><span>© <?= date('Y') ?> FarDU · KPI baholash tizimi</span><span>Mehnatingiz natijasi — e’tiborda.</span></footer></div>

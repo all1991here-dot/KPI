@@ -239,3 +239,33 @@
   addEventListener('pageshow', () => { suspended = false; resize(); });
   resize();
 })();
+
+// Refresh the signed-in user's in-app notification count; no browser permission needed.
+(() => {
+  const link = document.querySelector('[data-notification-url]');
+  const badge = link?.querySelector('[data-notification-count]');
+  if (!link || !badge) return;
+  let timer, pending = false, stopped = false;
+  async function refresh() {
+    clearTimeout(timer);
+    if (pending || stopped) return;
+    if (document.hidden) { timer = setTimeout(refresh, 15000); return; }
+    pending = true;
+    try {
+      const response = await fetch(link.dataset.notificationUrl, {credentials: 'same-origin', cache: 'no-store', headers: {Accept: 'application/json'}});
+      if (response.ok && response.headers.get('content-type')?.includes('application/json')) {
+        const data = await response.json();
+        if (Number.isInteger(data.unread) && data.unread >= 0) {
+          badge.textContent = data.unread > 99 ? '99+' : String(data.unread);
+          badge.hidden = data.unread === 0;
+          link.setAttribute('aria-label', `Bildirishnomalar: ${data.unread} ta o‘qilmagan`);
+        }
+      }
+    } catch (_) { /* Keep the current count during a temporary connection failure. */ }
+    finally { pending = false; if (!stopped) timer = setTimeout(refresh, 15000); }
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+  addEventListener('pagehide', () => { stopped = true; clearTimeout(timer); });
+  addEventListener('pageshow', event => { if (event.persisted) { stopped = false; refresh(); } });
+  timer = setTimeout(refresh, 15000);
+})();
